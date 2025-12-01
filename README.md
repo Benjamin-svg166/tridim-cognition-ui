@@ -1,41 +1,139 @@
-# tridim-cognition-ui
+# Getting Started with Create React App
 
-An immersive, canvas-based rendering engine for layered cognition boards — built with React and designed for tridimensional chess simulations.
+This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
-## 🚀 Features
+## Available Scripts
 
-- Canvas-based board rendering with animation support
-- Modular component structure (`BoardRenderer.js`)
-- Ready for cognition trail overlays and hover/click interactivity
-- GitHub-ready for collaboration and onboarding
+In the project directory, you can run:
 
-## 🛠️ Getting Started
+### `npm start`
 
-1. Clone the repo:
-   ```bash
-   git clone https://github.com/Benjamin-svg166/tridim-cognition-ui.git
-   cd tridim-cognition-ui
+Runs the app in the development mode.\
+Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
 
-## 🧠 Cognition Trail Roadmap
+The page will reload when you make changes.\
+You may also see any lint errors in the console.
 
-This project is evolving toward a fully interactive cognition simulation platform. The cognition trail system will visualize layered thought processes, strategic depth, and decision pathways in tridimensional chess. Here's the roadmap:
+## 3D Chess Prototype (Overview)
+- Purpose: Experimental multi-level chess board rendered on canvas with basic move validation, path obstruction checks, captures, turn enforcement, undo/redo, and simple move animations.
+- Main files:
+	- `src/components/ThreeDChessBoard.jsx`
+	- `src/components/threeDChessUtils.js`
+	- Tests: `src/components/ThreeDChessBoard.test.js`, `src/components/threeDChessUtils.test.js`, `src/components/threeDChessUtils.path.test.js`
 
-### 🔹 Phase 1: Trail Infrastructure
-- [x] Canvas-based board rendering
-- [ ] Define trail data structure (nodes, pulses, timestamps)
-- [ ] Implement hover/click triggers for cognition nodes
-- [ ] Animate cognition pulses across layers
+### Run & Test
+- Install dependencies:
+	- `npm install`
+- Run tests (non-watch):
+	- `npm test -- --watchAll=false`
+- Start dev server:
+	- `npm start` (http://localhost:3000)
 
-### 🔹 Phase 2: Simulation Logic
-- [ ] Encode decision trees and strategic branches
-- [ ] Render trail overlays based on move history
-- [ ] Integrate cognition trail playback (step-through mode)
+### Features
+- Multi-level board rendering on canvas.
+- Rook/Bishop/Knight/Queen movement rules via utilities.
+- Path obstruction checking and capture handling.
+- Turn enforcement, move history, undo/redo.
+- Basic animation: interpolated piece movement with requestAnimationFrame.
 
-### 🔹 Phase 3: Collaboration & Expansion
-- [ ] Document trail API for external modules
-- [ ] Enable real-time cognition sharing (WebSocket or peer sync)
-- [ ] Add contributor guidelines for trail extensions
+### Notes
+- Animation and board state use `useRef` to avoid excessive React re-renders.
+- Canvas event listeners are cleaned up in `useEffect`.
+- Tests rely on canvas API mocks in `src/setupTests.js`.
 
----
+## Project Cleanup
 
-Want to contribute to the cognition trail system? Start by exploring `BoardRenderer.js` and proposing a trail schema in `src/trails/`. All ideas welcome.
+### Post-PR Cleanup (Optional)
+After merging the `chess-prototype-clean` branch, clean up temporary artifacts:
+
+**Remove temporary clone:**
+```powershell
+Remove-Item -Recurse -Force "$env:USERPROFILE\tmp-tridim-clean"
+```
+
+**Remove nested repository (if present):**
+Only after confirming your changes are merged and backed up on GitHub:
+```powershell
+Remove-Item -Recurse -Force "C:\Users\bussi\Documents\cognition-board-ui-react\.git"
+```
+
+### File Structure Consolidation
+The project now uses a single BoardRenderer component:
+- **Active:** `src/components/BoardRenderer.jsx` (canonical implementation)
+- **Re-export:** `src/BoardRenderer.jsx` (compatibility shim for legacy imports)
+- **Removed:** `src/canvas/`, `src/canvas - Copy/`, `src/New folder/` (obsolete duplicates)
+
+### Branch Protection (Recommended)
+To require CI checks before merging, set up branch protection:
+
+1. Go to: `https://github.com/Benjamin-svg166/tridim-cognition-ui/settings/branches`
+2. Click "Add rule" for `main` branch
+3. Enable:
+   - ✅ Require status checks to pass before merging
+   - ✅ Require branches to be up to date before merging
+   - Select: `build-and-test` (from `.github/workflows/ci.yml`)
+   - ✅ Require linear history (optional)
+4. Save changes
+
+Alternatively, use GitHub CLI (requires authentication):
+```powershell
+gh api repos/Benjamin-svg166/tridim-cognition-ui/branches/main/protection -X PUT -F required_status_checks='{"strict":true,"contexts":["build-and-test"]}' -F enforce_admins=true -F required_pull_request_reviews='{"dismiss_stale_reviews":true,"require_code_owner_reviews":false}'
+```
+
+### `npm test`
+
+Launches the test runner in the interactive watch mode.\
+See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+
+### `npm run build`
+
+Builds the app for production to the `build` folder.\
+It correctly bundles React in production mode and optimizes the build for the best performance.
+
+The build is minified and the filenames include the hashes.\
+Your app is ready to be deployed!
+
+See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+
+### `npm run eject`
+
+**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+
+If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+
+Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+
+You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+
+## Learn More
+
+You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+
+To learn React, check out the [React documentation](https://reactjs.org/).
+
+### Code Splitting
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+
+### Analyzing the Bundle Size
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+
+### Making a Progressive Web App
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+
+### Advanced Configuration
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+
+### Deployment
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+
+### `npm run build` fails to minify
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+ 
+## Deployment Test
+Triggering GitHub Pages workflow run
