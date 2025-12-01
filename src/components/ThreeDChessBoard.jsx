@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { isValidMove, isPathClear } from './threeDChessUtils';
 
 // Simple 3D chess prototype component with piece rendering and basic moves.
@@ -212,7 +212,7 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
     redoStackRef.current = []; // clear redo stack on new move
   };
 
-  const undo = () => {
+  const undo = useCallback(() => {
     if (undoStackRef.current.length === 0) return;
     const state = undoStackRef.current.pop();
     if (state) {
@@ -238,9 +238,9 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
       setToMove(state.toMove);
       setVersion((v) => v + 1);
     }
-  };
+  }, [moveHistory, toMove]);
 
-  const redo = () => {
+  const redo = useCallback(() => {
     if (redoStackRef.current.length === 0) return;
     const state = redoStackRef.current.pop();
     if (state) {
@@ -266,7 +266,7 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
       setToMove(state.toMove);
       setVersion((v) => v + 1);
     }
-  };
+  }, [moveHistory, toMove]);
 
   // animation loop for move replays
   useEffect(() => {
@@ -300,7 +300,7 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [moveHistory, toMove]);
+  }, [moveHistory, toMove, undo, redo]);
 
   return (
     <div style={{ maxWidth: canvasSize + 40 }}>

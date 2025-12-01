@@ -59,7 +59,8 @@ export function isValidMove(pieceType, from, to) {
   }
 }
 
-export default { isRookMove, isBishopMove, isKnightMove, isValidMove };
+const chessUtils = { isRookMove, isBishopMove, isKnightMove, isValidMove };
+export default chessUtils;
 
 
 // Check that all intermediate squares between `from` and `to` are empty.
