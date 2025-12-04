@@ -26,29 +26,31 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
         piecesRef.current.set(key, { id: key, type, color, pos: { x, y, z }, hasMoved: false });
       };
       
-      // WHITE PIECES (rank 0 and 1)
-      // Back rank (y=0)
-      add('rook', 0, 0, 0, 'white');
-      add('knight', 1, 0, 0, 'white');
-      add('bishop', 2, 0, 0, 'white');
-      add('queen', 3, 0, 0, 'white');
-      add('king', 4, 0, 0, 'white');
-      add('bishop', 5, 0, 0, 'white');
-      add('knight', 6, 0, 0, 'white');
-      add('rook', 7, 0, 0, 'white');
+      // WHITE PIECES on TOP BOARD (z=2, rank 0 and 1)
+      // Back rank (y=0, z=2)
+      add('rook', 0, 0, 2, 'white');
+      add('knight', 1, 0, 2, 'white');
+      add('bishop', 2, 0, 2, 'white');
+      add('queen', 3, 0, 2, 'white');
+      add('king', 4, 0, 2, 'white');
+      add('bishop', 5, 0, 2, 'white');
+      add('knight', 6, 0, 2, 'white');
+      add('rook', 7, 0, 2, 'white');
       
-      // Pawns (y=1)
+      // White Pawns (y=1, z=2)
       for (let x = 0; x < size; x++) {
-        add('pawn', x, 1, 0, 'white');
+        add('pawn', x, 1, 2, 'white');
       }
       
-      // BLACK PIECES (rank 6 and 7)
-      // Pawns (y=6)
+      // MIDDLE BOARD (z=1) - EMPTY (for piece travel)
+      
+      // BLACK PIECES on BOTTOM BOARD (z=0, rank 6 and 7)
+      // Black Pawns (y=6, z=0)
       for (let x = 0; x < size; x++) {
         add('pawn', x, 6, 0, 'black');
       }
       
-      // Back rank (y=7)
+      // Back rank (y=7, z=0)
       add('rook', 0, 7, 0, 'black');
       add('knight', 1, 7, 0, 'black');
       add('bishop', 2, 7, 0, 'black');
@@ -68,12 +70,14 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
       const cellH = canvasSize / size;
 
       ctx.clearRect(0, 0, canvasSize, canvasSize);
-      ctx.fillStyle = z === activeLevel ? '#ffffff' : '#fafafa';
+      // Semi-transparent backgrounds for overlay visibility
+      const opacity = z === activeLevel ? 0.15 : 0.08;
+      ctx.fillStyle = `rgba(250, 250, 250, ${opacity})`;
       ctx.fillRect(0, 0, canvasSize, canvasSize);
 
-      // grid
-      ctx.strokeStyle = '#666';
-      ctx.lineWidth = 1;
+      // grid with transparency
+      ctx.strokeStyle = z === activeLevel ? 'rgba(102, 102, 102, 0.6)' : 'rgba(102, 102, 102, 0.3)';
+      ctx.lineWidth = z === activeLevel ? 1.5 : 1;
       for (let i = 0; i <= size; i++) {
         const pos = i * cellW;
         ctx.beginPath();
@@ -86,9 +90,11 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
         ctx.stroke();
       }
 
-      ctx.fillStyle = '#333';
-      ctx.font = '12px Arial';
-      ctx.fillText(`Level ${z}`, 6, 14);
+      // Level labels with board names
+      const boardNames = ['Bottom (Black)', 'Middle (Empty)', 'Top (White)'];
+      ctx.fillStyle = z === activeLevel ? 'rgba(0, 0, 0, 0.9)' : 'rgba(0, 0, 0, 0.5)';
+      ctx.font = z === activeLevel ? 'bold 13px Arial' : '12px Arial';
+      ctx.fillText(`${boardNames[z]}`, 6, 14);
 
       // markers
       markersRef.current[z].forEach((m) => {
@@ -101,20 +107,25 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
         ctx.stroke();
       });
 
-      // pieces
+      // pieces with enhanced visibility on transparent boards
       piecesRef.current.forEach((p) => {
         const { x, y, z: pz } = p.pos;
         if (pz !== z) return;
         ctx.beginPath();
         ctx.arc((x + 0.5) * cellW, (y + 0.5) * cellH, Math.min(cellW, cellH) * 0.35, 0, Math.PI * 2);
-        ctx.fillStyle = p.color === 'white' ? 'rgba(255,255,255,0.95)' : 'rgba(33,33,33,0.95)';
+        // Solid pieces with glow effect for visibility through transparency
+        ctx.fillStyle = p.color === 'white' ? '#ffffff' : '#1a1a1a';
         ctx.fill();
         ctx.strokeStyle = p.color === 'white' ? '#000' : '#fff';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2.5;
         ctx.stroke();
+        // Add subtle shadow for depth
+        ctx.shadowColor = p.color === 'white' ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.3)';
+        ctx.shadowBlur = 4;
         ctx.fillStyle = p.color === 'white' ? '#000' : '#fff';
-        ctx.font = '12px Arial';
+        ctx.font = 'bold 13px Arial';
         ctx.fillText(p.type[0].toUpperCase(), (x + 0.45) * cellW, (y + 0.6) * cellH);
+        ctx.shadowBlur = 0; // reset shadow
       });
 
       // animated piece (during undo/redo replay or castling)
@@ -552,18 +563,34 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        {Array.from({ length: levels }, (_, z) => (
-          <canvas
-            key={z}
-            ref={(el) => (canvasesRef.current[z] = el)}
-            width={canvasSize}
-            height={canvasSize}
-            onClick={(e) => handleClick(e, z)}
-            style={{ border: z === activeLevel ? '3px solid #00796b' : '1px solid #ccc', cursor: 'pointer' }}
-            data-testid={`level-canvas-${z}`}
-          />
-        ))}
+      <div style={{ position: 'relative', width: canvasSize, height: canvasSize, margin: '0 auto' }}>
+        {/* Overlay all three boards in stacked order */}
+        {Array.from({ length: levels }, (_, z) => {
+          const zIndex = z; // Bottom=0, Middle=1, Top=2
+          const offsetY = (2 - z) * 8; // Slight vertical offset for 3D perspective
+          const offsetX = (2 - z) * 8;
+          return (
+            <canvas
+              key={z}
+              ref={(el) => (canvasesRef.current[z] = el)}
+              width={canvasSize}
+              height={canvasSize}
+              onClick={(e) => handleClick(e, z)}
+              style={{
+                position: 'absolute',
+                top: offsetY,
+                left: offsetX,
+                zIndex: zIndex,
+                border: z === activeLevel ? '3px solid #00796b' : '1px solid rgba(204, 204, 204, 0.5)',
+                cursor: 'pointer',
+                pointerEvents: z === activeLevel ? 'auto' : 'none', // Only active level receives clicks
+                boxShadow: z === activeLevel ? '0 4px 12px rgba(0, 121, 107, 0.3)' : '0 2px 4px rgba(0,0,0,0.1)',
+                borderRadius: 4,
+              }}
+              data-testid={`level-canvas-${z}`}
+            />
+          );
+        })}
       </div>
     </div>
   );
