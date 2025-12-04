@@ -14,6 +14,72 @@ Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
 The page will reload when you make changes.\
 You may also see any lint errors in the console.
 
+## 3D Chess Prototype (Overview)
+- Purpose: Experimental multi-level chess board rendered on canvas with basic move validation, path obstruction checks, captures, turn enforcement, undo/redo, and simple move animations.
+- Main files:
+	- `src/components/ThreeDChessBoard.jsx`
+	- `src/components/threeDChessUtils.js`
+	- Tests: `src/components/ThreeDChessBoard.test.js`, `src/components/threeDChessUtils.test.js`, `src/components/threeDChessUtils.path.test.js`
+
+### Run & Test
+- Install dependencies:
+	- `npm install`
+- Run tests (non-watch):
+	- `npm test -- --watchAll=false`
+- Start dev server:
+	- `npm start` (http://localhost:3000)
+
+### Features
+- Multi-level board rendering on canvas.
+- Rook/Bishop/Knight/Queen movement rules via utilities.
+- Path obstruction checking and capture handling.
+- Turn enforcement, move history, undo/redo.
+- Basic animation: interpolated piece movement with requestAnimationFrame.
+
+### Notes
+- Animation and board state use `useRef` to avoid excessive React re-renders.
+- Canvas event listeners are cleaned up in `useEffect`.
+- Tests rely on canvas API mocks in `src/setupTests.js`.
+
+## Project Cleanup
+
+### Post-PR Cleanup (Optional)
+After merging the `chess-prototype-clean` branch, clean up temporary artifacts:
+
+**Remove temporary clone:**
+```powershell
+Remove-Item -Recurse -Force "$env:USERPROFILE\tmp-tridim-clean"
+```
+
+**Remove nested repository (if present):**
+Only after confirming your changes are merged and backed up on GitHub:
+```powershell
+Remove-Item -Recurse -Force "C:\Users\bussi\Documents\cognition-board-ui-react\.git"
+```
+
+### File Structure Consolidation
+The project now uses a single BoardRenderer component:
+- **Active:** `src/components/BoardRenderer.jsx` (canonical implementation)
+- **Re-export:** `src/BoardRenderer.jsx` (compatibility shim for legacy imports)
+- **Removed:** `src/canvas/`, `src/canvas - Copy/`, `src/New folder/` (obsolete duplicates)
+
+### Branch Protection (Recommended)
+To require CI checks before merging, set up branch protection:
+
+1. Go to: `https://github.com/Benjamin-svg166/tridim-cognition-ui/settings/branches`
+2. Click "Add rule" for `main` branch
+3. Enable:
+   - ✅ Require status checks to pass before merging
+   - ✅ Require branches to be up to date before merging
+   - Select: `build-and-test` (from `.github/workflows/ci.yml`)
+   - ✅ Require linear history (optional)
+4. Save changes
+
+Alternatively, use GitHub CLI (requires authentication):
+```powershell
+gh api repos/Benjamin-svg166/tridim-cognition-ui/branches/main/protection -X PUT -F required_status_checks='{"strict":true,"contexts":["build-and-test"]}' -F enforce_admins=true -F required_pull_request_reviews='{"dismiss_stale_reviews":true,"require_code_owner_reviews":false}'
+```
+
 ### `npm test`
 
 Launches the test runner in the interactive watch mode.\

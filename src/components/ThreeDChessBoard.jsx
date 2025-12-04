@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { isValidMove, isPathClear } from './threeDChessUtils';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { isValidMove, isPathClear, canPromote, isEnPassant } from './threeDChessUtils';
+import PromotionModal from './PromotionModal';
 
 // Simple 3D chess prototype component with piece rendering and basic moves.
 const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
@@ -14,19 +15,27 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
   const undoStackRef = useRef([]); // stack of game states for undo
   const redoStackRef = useRef([]); // stack of game states for redo
   const animationRef = useRef(null); // current animation state: { startTime, duration, fromPos, toPos, piece, level }
+  const [promotionPending, setPromotionPending] = useState(null); // { from, to, piece } waiting for promotion choice
 
   useEffect(() => {
     // Initialize sample pieces if empty
     if (piecesRef.current.size === 0) {
       const add = (type, x, y, z, color = 'white') => {
         const key = `${x},${y},${z}`;
-        piecesRef.current.set(key, { id: key, type, color, pos: { x, y, z } });
+        piecesRef.current.set(key, { id: key, type, color, pos: { x, y, z }, hasMoved: false });
       };
+      // Add pawns for testing
+      for (let x = 0; x < size; x++) {
+        add('pawn', x, 1, 0, 'white');
+        add('pawn', x, 6, 0, 'black');
+      }
       add('rook', 0, 0, 0, 'white');
       add('bishop', 2, 2, 0, 'white');
       add('knight', 1, 0, 0, 'white');
       add('queen', 4, 4, 1, 'black');
       add('rook', 7, 7, 2, 'black');
+      add('king', 4, 0, 0, 'white');
+      add('king', 4, 7, 0, 'black');
     }
 
     // draw all levels (grid + markers + pieces + selection highlight)
@@ -138,35 +147,93 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
       if (piece && piece.color === toMove) {
         const from = sel.pos;
         const to = { x: cx, y: cy, z };
-        if (isValidMove(piece.type, from, to)) {
+        const destKey = `${to.x},${to.y},${to.z}`;
+        const isCapture = piecesRef.current.has(destKey);
+        
+        if (isValidMove(piece.type, from, to, piece.color, isCapture, piece.hasMoved)) {
           const ptype = (piece.type || '').toLowerCase();
+          
+          // Check path clearance for sliding pieces
           if ((['rook', 'bishop', 'queen'].includes(ptype)) && !isPathClear(piecesRef.current, from, to)) {
-            // blocked, move invalid
-          } else {
-            const destKey = `${to.x},${to.y},${to.z}`;
-            if (piecesRef.current.has(destKey)) {
-              const dest = piecesRef.current.get(destKey);
-              if (dest.color !== piece.color) {
-                // capture opposite color piece
-                piecesRef.current.delete(destKey);
-                piecesRef.current.delete(sel.key);
-                piece.pos = to;
-                piecesRef.current.set(destKey, piece);
-                captureState();
-                setMoveHistory((h) => [...h, { from: sel.pos, to, piece: piece.type, capColor: dest.color }]);
-                setToMove(toMove === 'white' ? 'black' : 'white');
-              }
-            } else {
-              // empty destination
+            selectedRef.current = null;
+            setVersion((v) => v + 1);
+            return;
+          }
+          
+          // Check pawn-specific rules
+          if (ptype === 'pawn') {
+            // Pawns can't move forward into occupied squares
+            if (!isCapture && piecesRef.current.has(destKey)) {
+              selectedRef.current = null;
+              setVersion((v) => v + 1);
+              return;
+            }
+            
+            // Check for en passant
+            const lastMove = moveHistory[moveHistory.length - 1];
+            if (isEnPassant(lastMove, from, to, piece.color)) {
+              // Remove captured pawn
+              const capturedKey = `${lastMove.to.x},${lastMove.to.y},${lastMove.to.z}`;
+              const captured = piecesRef.current.get(capturedKey);
+              piecesRef.current.delete(capturedKey);
+              
+              // Move attacking pawn
               piecesRef.current.delete(sel.key);
-              const newKey = `${to.x},${to.y},${to.z}`;
               piece.pos = to;
-              piecesRef.current.set(newKey, piece);
+              piece.hasMoved = true;
+              piecesRef.current.set(destKey, piece);
+              
               captureState();
-              setMoveHistory((h) => [...h, { from: sel.pos, to, piece: piece.type }]);
+              setMoveHistory((h) => [...h, { from: sel.pos, to, piece: piece.type, capColor: captured.color, enPassant: true }]);
               setToMove(toMove === 'white' ? 'black' : 'white');
+              selectedRef.current = null;
+              setVersion((v) => v + 1);
+              return;
             }
           }
+          
+          let capturedColor = null;
+          if (piecesRef.current.has(destKey)) {
+            const dest = piecesRef.current.get(destKey);
+            if (dest.color !== piece.color) {
+              // capture opposite color piece
+              capturedColor = dest.color;
+              piecesRef.current.delete(destKey);
+            } else {
+              // can't capture own piece
+              selectedRef.current = null;
+              setVersion((v) => v + 1);
+              return;
+            }
+          }
+          
+          // Move piece
+          piecesRef.current.delete(sel.key);
+          piece.pos = to;
+          piece.hasMoved = true;
+          
+          // Check for pawn promotion
+          if (ptype === 'pawn' && canPromote(to, piece.color)) {
+            setPromotionPending({ from: sel.pos, to, piece, capturedColor });
+            selectedRef.current = null;
+            setVersion((v) => v + 1);
+            return;
+          }
+          
+          piecesRef.current.set(destKey, piece);
+          captureState();
+          setMoveHistory((h) => [...h, { from: sel.pos, to, piece: piece.type, capColor: capturedColor }]);
+          setToMove(toMove === 'white' ? 'black' : 'white');
+          
+          // Trigger animation
+          animationRef.current = {
+            startTime: Date.now(),
+            duration: 300,
+            fromPos: from,
+            toPos: to,
+            piece: piece.type,
+            level: to.z,
+          };
         }
       }
       selectedRef.current = null;
@@ -202,7 +269,7 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
     setVersion((v) => v + 1);
   };
 
-  const captureState = () => {
+  const captureState = useCallback(() => {
     // snapshot current game state for undo
     undoStackRef.current.push({
       pieces: new Map(piecesRef.current),
@@ -210,9 +277,9 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
       toMove,
     });
     redoStackRef.current = []; // clear redo stack on new move
-  };
+  }, [moveHistory, toMove]);
 
-  const undo = () => {
+  const undo = useCallback(() => {
     if (undoStackRef.current.length === 0) return;
     const state = undoStackRef.current.pop();
     if (state) {
@@ -238,9 +305,9 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
       setToMove(state.toMove);
       setVersion((v) => v + 1);
     }
-  };
+  }, [moveHistory, toMove]);
 
-  const redo = () => {
+  const redo = useCallback(() => {
     if (redoStackRef.current.length === 0) return;
     const state = redoStackRef.current.pop();
     if (state) {
@@ -266,7 +333,7 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
       setToMove(state.toMove);
       setVersion((v) => v + 1);
     }
-  };
+  }, [moveHistory, toMove]);
 
   // animation loop for move replays
   useEffect(() => {
@@ -300,10 +367,35 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [moveHistory, toMove]);
+  }, [moveHistory, toMove, undo, redo]);
+
+  // Handle promotion selection
+  const handlePromotion = useCallback((newType) => {
+    if (!promotionPending) return;
+    
+    const { from, to, piece, capturedColor } = promotionPending;
+    const destKey = `${to.x},${to.y},${to.z}`;
+    
+    // Update piece type
+    piece.type = newType;
+    piecesRef.current.set(destKey, piece);
+    
+    captureState();
+    setMoveHistory((h) => [...h, { from, to, piece: newType, capColor: capturedColor, promotion: true }]);
+    setToMove(toMove === 'white' ? 'black' : 'white');
+    setPromotionPending(null);
+    setVersion((v) => v + 1);
+  }, [promotionPending, toMove, captureState]);
 
   return (
     <div style={{ maxWidth: canvasSize + 40 }}>
+      {promotionPending && (
+        <PromotionModal
+          color={promotionPending.piece.color}
+          onSelect={handlePromotion}
+        />
+      )}
+      
       <div style={{ marginBottom: 8, padding: 8, border: '1px solid #ccc', borderRadius: 4, backgroundColor: '#f5f5f5' }}>
         <div style={{ marginBottom: 8 }}>
           <strong>Turn: </strong>
