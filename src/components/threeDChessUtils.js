@@ -99,6 +99,200 @@ export function isValidMove(pieceType, from, to, color, isCapture, hasMoved) {
 const chessUtils = { isRookMove, isBishopMove, isKnightMove, isQueenMove, isPawnMove, isKingMove, isValidMove };
 export default chessUtils;
 
+// Find the king position for a given color
+// piecesMap: Map with keys like 'x,y,z'
+// color: 'white' or 'black'
+// Returns: { x, y, z } or null if not found
+export function findKing(piecesMap, color) {
+  for (const [, piece] of piecesMap.entries()) {
+    if (piece.type === 'king' && piece.color === color) {
+      return piece.pos;
+    }
+  }
+  return null;
+}
+
+// Check if a specific square is under attack by opponent
+// piecesMap: current board state
+// targetPos: position to check if under attack
+// attackingColor: color of pieces that might be attacking
+// Returns: boolean
+export function isSquareUnderAttack(piecesMap, targetPos, attackingColor) {
+  for (const [, piece] of piecesMap.entries()) {
+    if (piece.color !== attackingColor) continue;
+    
+    const { pos, type } = piece;
+    
+    // Skip if same square
+    if (pos.x === targetPos.x && pos.y === targetPos.y && pos.z === targetPos.z) continue;
+    
+    // Check if this piece can move to target position
+    let canAttack = false;
+    
+    if (type === 'pawn') {
+      // Pawns attack diagonally (different from forward movement)
+      const d = delta(pos, targetPos);
+      const direction = attackingColor === 'white' ? 1 : -1;
+      // Pawn attacks one square diagonally forward
+      if (d.y === direction && Math.abs(d.x) === 1 && d.z === 0) {
+        canAttack = true;
+      }
+    } else if (type === 'king') {
+      // King attacks one square in any direction (but we don't check king attacks king)
+      canAttack = isKingMove(pos, targetPos);
+    } else {
+      // For other pieces, use standard move validation (no capture flag needed for attack)
+      canAttack = isValidMove(type, pos, targetPos, attackingColor, false, false);
+    }
+    
+    if (!canAttack) continue;
+    
+    // For sliding pieces (rook, bishop, queen), check path is clear
+    if (['rook', 'bishop', 'queen'].includes(type)) {
+      if (!isPathClear(piecesMap, pos, targetPos)) continue;
+    }
+    
+    return true; // Found an attacking piece
+  }
+  
+  return false;
+}
+
+// Check if a king is currently in check
+// piecesMap: current board state
+// kingColor: color of the king to check
+// Returns: boolean
+export function isInCheck(piecesMap, kingColor) {
+  const kingPos = findKing(piecesMap, kingColor);
+  if (!kingPos) return false; // No king found
+  
+  const opponentColor = kingColor === 'white' ? 'black' : 'white';
+  return isSquareUnderAttack(piecesMap, kingPos, opponentColor);
+}
+
+// Check if a move would leave own king in check
+// piecesMap: current board state
+// from: source position
+// to: destination position
+// color: color of the moving piece
+// Returns: boolean - true if move is legal (doesn't leave king in check)
+export function wouldBeInCheckAfterMove(piecesMap, from, to, color) {
+  // Create a temporary board state with the move applied
+  const tempMap = new Map(piecesMap);
+  
+  const fromKey = `${from.x},${from.y},${from.z}`;
+  const toKey = `${to.x},${to.y},${to.z}`;
+  
+  const movingPiece = tempMap.get(fromKey);
+  if (!movingPiece) return true; // Invalid move
+  
+  // Apply the move
+  tempMap.delete(fromKey);
+  tempMap.set(toKey, { ...movingPiece, pos: to });
+  
+  // Check if king is in check after this move
+  return isInCheck(tempMap, color);
+}
+
+// Check if a player is in checkmate
+// piecesMap: current board state
+// color: color to check for checkmate
+// Returns: boolean
+export function isCheckmate(piecesMap, color) {
+  // Must be in check first
+  if (!isInCheck(piecesMap, color)) return false;
+  
+  // Try all possible moves to see if any can escape check
+  for (const [, piece] of piecesMap.entries()) {
+    if (piece.color !== color) continue;
+    
+    const { pos, type } = piece;
+    
+    // Try all possible destination squares (simplified - iterate board)
+    for (let x = 0; x < 8; x++) {
+      for (let y = 0; y < 8; y++) {
+        for (let z = 0; z < 3; z++) {
+          const to = { x, y, z };
+          const toKey = `${x},${y},${z}`;
+          
+          // Skip if same position
+          if (pos.x === x && pos.y === y && pos.z === z) continue;
+          
+          // Skip if occupied by own piece
+          const targetPiece = piecesMap.get(toKey);
+          if (targetPiece && targetPiece.color === color) continue;
+          
+          const isCapture = !!targetPiece;
+          
+          // Check if move is valid for this piece type
+          if (!isValidMove(type, pos, to, color, isCapture, piece.hasMoved)) continue;
+          
+          // For sliding pieces, check path
+          if (['rook', 'bishop', 'queen'].includes(type)) {
+            if (!isPathClear(piecesMap, pos, to)) continue;
+          }
+          
+          // Check if this move would leave king in check
+          if (!wouldBeInCheckAfterMove(piecesMap, pos, to, color)) {
+            return false; // Found a legal move that escapes check
+          }
+        }
+      }
+    }
+  }
+  
+  return true; // No legal moves found - checkmate
+}
+
+// Check if a player is in stalemate (not in check, but no legal moves)
+// piecesMap: current board state
+// color: color to check for stalemate
+// Returns: boolean
+export function isStalemate(piecesMap, color) {
+  // Must NOT be in check
+  if (isInCheck(piecesMap, color)) return false;
+  
+  // Check if there are any legal moves
+  for (const [, piece] of piecesMap.entries()) {
+    if (piece.color !== color) continue;
+    
+    const { pos, type } = piece;
+    
+    // Try all possible destination squares
+    for (let x = 0; x < 8; x++) {
+      for (let y = 0; y < 8; y++) {
+        for (let z = 0; z < 3; z++) {
+          const to = { x, y, z };
+          const toKey = `${x},${y},${z}`;
+          
+          // Skip if same position
+          if (pos.x === x && pos.y === y && pos.z === z) continue;
+          
+          // Skip if occupied by own piece
+          const targetPiece = piecesMap.get(toKey);
+          if (targetPiece && targetPiece.color === color) continue;
+          
+          const isCapture = !!targetPiece;
+          
+          // Check if move is valid for this piece type
+          if (!isValidMove(type, pos, to, color, isCapture, piece.hasMoved)) continue;
+          
+          // For sliding pieces, check path
+          if (['rook', 'bishop', 'queen'].includes(type)) {
+            if (!isPathClear(piecesMap, pos, to)) continue;
+          }
+          
+          // Check if this move would leave king in check
+          if (!wouldBeInCheckAfterMove(piecesMap, pos, to, color)) {
+            return false; // Found a legal move
+          }
+        }
+      }
+    }
+  }
+  
+  return true; // No legal moves found - stalemate
+}
 
 // Check that all intermediate squares between `from` and `to` are empty.
 // `piecesMap` is a Map with keys like 'x,y,z'. Excludes `from` and `to` positions.
@@ -226,9 +420,25 @@ export function canCastle(piecesMap, kingPos, castlingInfo, color, kingHasMoved,
     if (piecesMap.has(key)) return false;
   }
   
-  // King's destination and squares it passes through must not be under attack
-  // For now, we'll skip check detection (Phase 1.3)
-  // TODO: Add check detection in Phase 1.3
+  // King must not be in check, and cannot castle through check or into check
+  const opponentColor = color === 'white' ? 'black' : 'white';
+  
+  // King cannot be in check currently
+  if (isInCheck(piecesMap, color)) return false;
+  
+  // Determine squares the king passes through (including destination)
+  const direction = castlingInfo.type === 'kingside' ? 1 : -1;
+  const squaresToCheck = [
+    { x: kingPos.x + direction, y: kingPos.y, z: kingPos.z }, // Square king passes through
+    { x: kingPos.x + (direction * 2), y: kingPos.y, z: kingPos.z } // King's destination
+  ];
+  
+  // King cannot pass through or land on a square under attack
+  for (const square of squaresToCheck) {
+    if (isSquareUnderAttack(piecesMap, square, opponentColor)) {
+      return false;
+    }
+  }
   
   return true;
 }

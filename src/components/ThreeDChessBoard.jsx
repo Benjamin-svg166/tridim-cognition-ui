@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { isValidMove, isPathClear, canPromote, isEnPassant, isCastling, canCastle } from './threeDChessUtils';
+import { isValidMove, isPathClear, canPromote, isEnPassant, isCastling, canCastle, wouldBeInCheckAfterMove, isInCheck, isCheckmate, isStalemate } from './threeDChessUtils';
 import PromotionModal from './PromotionModal';
 
 // Simple 3D chess prototype component with piece rendering and basic moves.
@@ -16,6 +16,7 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
   const redoStackRef = useRef([]); // stack of game states for redo
   const animationRef = useRef(null); // current animation state: { startTime, duration, fromPos, toPos, piece, level }
   const [promotionPending, setPromotionPending] = useState(null); // { from, to, piece } waiting for promotion choice
+  const [gameStatus, setGameStatus] = useState(null); // 'check', 'checkmate', 'stalemate', or null
 
   useEffect(() => {
     // Initialize sample pieces if empty
@@ -138,6 +139,19 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
     }
   }, [size, levels, canvasSize, activeLevel, version]);
 
+  // Check game status (check, checkmate, stalemate) after a move
+  const checkGameStatus = useCallback((nextPlayer) => {
+    if (isCheckmate(piecesRef.current, nextPlayer)) {
+      setGameStatus('checkmate');
+    } else if (isStalemate(piecesRef.current, nextPlayer)) {
+      setGameStatus('stalemate');
+    } else if (isInCheck(piecesRef.current, nextPlayer)) {
+      setGameStatus('check');
+    } else {
+      setGameStatus(null);
+    }
+  }, []);
+
   const handleClick = (e, z) => {
     const canvas = canvasesRef.current[z];
     if (!canvas) return;
@@ -184,7 +198,9 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
               
               captureState();
               setMoveHistory((h) => [...h, { from: sel.pos, to, piece: piece.type, castling: castlingInfo.type }]);
-              setToMove(toMove === 'white' ? 'black' : 'white');
+              const nextPlayer = toMove === 'white' ? 'black' : 'white';
+              setToMove(nextPlayer);
+              checkGameStatus(nextPlayer);
               
               // Trigger animation for both pieces
               animationRef.current = {
@@ -237,7 +253,9 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
               
               captureState();
               setMoveHistory((h) => [...h, { from: sel.pos, to, piece: piece.type, capColor: captured.color, enPassant: true }]);
-              setToMove(toMove === 'white' ? 'black' : 'white');
+              const nextPlayer = toMove === 'white' ? 'black' : 'white';
+              setToMove(nextPlayer);
+              checkGameStatus(nextPlayer);
               selectedRef.current = null;
               setVersion((v) => v + 1);
               return;
@@ -259,6 +277,14 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
             }
           }
           
+          // Validate move doesn't leave own king in check
+          if (wouldBeInCheckAfterMove(piecesRef.current, from, to, piece.color)) {
+            // Illegal move - would expose king to check
+            selectedRef.current = null;
+            setVersion((v) => v + 1);
+            return;
+          }
+          
           // Move piece
           piecesRef.current.delete(sel.key);
           piece.pos = to;
@@ -275,7 +301,9 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
           piecesRef.current.set(destKey, piece);
           captureState();
           setMoveHistory((h) => [...h, { from: sel.pos, to, piece: piece.type, capColor: capturedColor }]);
-          setToMove(toMove === 'white' ? 'black' : 'white');
+          const nextPlayer = toMove === 'white' ? 'black' : 'white';
+          setToMove(nextPlayer);
+          checkGameStatus(nextPlayer);
           
           // Trigger animation
           animationRef.current = {
@@ -434,10 +462,12 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
     
     captureState();
     setMoveHistory((h) => [...h, { from, to, piece: newType, capColor: capturedColor, promotion: true }]);
-    setToMove(toMove === 'white' ? 'black' : 'white');
+    const nextPlayer = toMove === 'white' ? 'black' : 'white';
+    setToMove(nextPlayer);
+    checkGameStatus(nextPlayer);
     setPromotionPending(null);
     setVersion((v) => v + 1);
-  }, [promotionPending, toMove, captureState]);
+  }, [promotionPending, toMove, captureState, checkGameStatus]);
 
   return (
     <div style={{ maxWidth: canvasSize + 40 }}>
@@ -454,6 +484,19 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
           <span style={{ fontWeight: 'bold', color: toMove === 'white' ? '#333' : '#666' }}>
             {toMove.toUpperCase()}
           </span>
+          {gameStatus && (
+            <span style={{ 
+              marginLeft: 16, 
+              fontWeight: 'bold', 
+              color: gameStatus === 'checkmate' ? '#d32f2f' : gameStatus === 'check' ? '#ff9800' : '#666',
+              backgroundColor: gameStatus === 'checkmate' ? '#ffebee' : gameStatus === 'check' ? '#fff3e0' : '#f5f5f5',
+              padding: '4px 8px',
+              borderRadius: 4,
+              border: '1px solid ' + (gameStatus === 'checkmate' ? '#d32f2f' : gameStatus === 'check' ? '#ff9800' : '#999')
+            }}>
+              {gameStatus === 'checkmate' ? '♔ CHECKMATE!' : gameStatus === 'check' ? '♔ CHECK!' : '⚔ STALEMATE'}
+            </span>
+          )}
           <button onClick={resetGame} style={{ marginLeft: 16, padding: '4px 8px', cursor: 'pointer' }}>
             Reset Game
           </button>
