@@ -25,19 +25,38 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
         const key = `${x},${y},${z}`;
         piecesRef.current.set(key, { id: key, type, color, pos: { x, y, z }, hasMoved: false });
       };
-      // Add pawns for testing
+      
+      // WHITE PIECES (rank 0 and 1)
+      // Back rank (y=0)
+      add('rook', 0, 0, 0, 'white');
+      add('knight', 1, 0, 0, 'white');
+      add('bishop', 2, 0, 0, 'white');
+      add('queen', 3, 0, 0, 'white');
+      add('king', 4, 0, 0, 'white');
+      add('bishop', 5, 0, 0, 'white');
+      add('knight', 6, 0, 0, 'white');
+      add('rook', 7, 0, 0, 'white');
+      
+      // Pawns (y=1)
       for (let x = 0; x < size; x++) {
         add('pawn', x, 1, 0, 'white');
+      }
+      
+      // BLACK PIECES (rank 6 and 7)
+      // Pawns (y=6)
+      for (let x = 0; x < size; x++) {
         add('pawn', x, 6, 0, 'black');
       }
-      // Rooks in corners
-      add('rook', 0, 0, 0, 'white');
-      add('rook', 7, 0, 0, 'white');
+      
+      // Back rank (y=7)
       add('rook', 0, 7, 0, 'black');
-      add('rook', 7, 7, 0, 'black');
-      // Kings
-      add('king', 4, 0, 0, 'white');
+      add('knight', 1, 7, 0, 'black');
+      add('bishop', 2, 7, 0, 'black');
+      add('queen', 3, 7, 0, 'black');
       add('king', 4, 7, 0, 'black');
+      add('bishop', 5, 7, 0, 'black');
+      add('knight', 6, 7, 0, 'black');
+      add('rook', 7, 7, 0, 'black');
     }
 
     // draw all levels (grid + markers + pieces + selection highlight)
