@@ -157,3 +157,78 @@ export function isEnPassant(lastMove, currentPos, targetPos, color) {
   
   return true;
 }
+
+// Detect if a move is a castling attempt
+// Returns: { type: 'kingside' | 'queenside' | null, rookFrom, rookTo }
+export function isCastling(from, to, color) {
+  const d = delta(from, to);
+  
+  // King must start from x=4
+  if (from.x !== 4) return { type: null };
+  
+  // Must be on correct rank for color
+  const baseY = color === 'white' ? 0 : 7;
+  if (from.y !== baseY || to.y !== baseY) return { type: null };
+  
+  // Must be on same level
+  if (d.z !== 0) return { type: null };
+  
+  // King moves exactly 2 squares horizontally
+  if (Math.abs(d.x) !== 2) return { type: null };
+  
+  const baseZ = 0; // standard level
+  
+  if (d.x === 2) {
+    // Kingside castling (king moves right)
+    return {
+      type: 'kingside',
+      rookFrom: { x: 7, y: baseY, z: baseZ },
+      rookTo: { x: 5, y: baseY, z: baseZ },
+    };
+  } else if (d.x === -2) {
+    // Queenside castling (king moves left)
+    return {
+      type: 'queenside',
+      rookFrom: { x: 0, y: baseY, z: baseZ },
+      rookTo: { x: 3, y: baseY, z: baseZ },
+    };
+  }
+  
+  return { type: null };
+}
+
+// Validate castling is legal
+// piecesMap: current board state
+// kingPos: king's current position
+// castlingInfo: result from isCastling()
+// color: 'white' or 'black'
+// kingHasMoved: whether king has moved before
+// rookHasMoved: whether the specific rook has moved before
+export function canCastle(piecesMap, kingPos, castlingInfo, color, kingHasMoved, rookHasMoved) {
+  if (!castlingInfo.type) return false;
+  
+  // King and rook must not have moved
+  if (kingHasMoved || rookHasMoved) return false;
+  
+  const { rookFrom } = castlingInfo;
+  const rookKey = `${rookFrom.x},${rookFrom.y},${rookFrom.z}`;
+  
+  // Rook must exist and be correct color
+  const rook = piecesMap.get(rookKey);
+  if (!rook || rook.type !== 'rook' || rook.color !== color) return false;
+  
+  // Path between king and rook must be clear
+  const minX = Math.min(kingPos.x, rookFrom.x);
+  const maxX = Math.max(kingPos.x, rookFrom.x);
+  
+  for (let x = minX + 1; x < maxX; x++) {
+    const key = `${x},${kingPos.y},${kingPos.z}`;
+    if (piecesMap.has(key)) return false;
+  }
+  
+  // King's destination and squares it passes through must not be under attack
+  // For now, we'll skip check detection (Phase 1.3)
+  // TODO: Add check detection in Phase 1.3
+  
+  return true;
+}

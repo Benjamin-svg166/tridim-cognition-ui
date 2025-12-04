@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { isValidMove, isPathClear, canPromote, isEnPassant } from './threeDChessUtils';
+import { isValidMove, isPathClear, canPromote, isEnPassant, isCastling, canCastle } from './threeDChessUtils';
 import PromotionModal from './PromotionModal';
 
 // Simple 3D chess prototype component with piece rendering and basic moves.
@@ -29,11 +29,12 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
         add('pawn', x, 1, 0, 'white');
         add('pawn', x, 6, 0, 'black');
       }
+      // Rooks in corners
       add('rook', 0, 0, 0, 'white');
-      add('bishop', 2, 2, 0, 'white');
-      add('knight', 1, 0, 0, 'white');
-      add('queen', 4, 4, 1, 'black');
-      add('rook', 7, 7, 2, 'black');
+      add('rook', 7, 0, 0, 'white');
+      add('rook', 0, 7, 0, 'black');
+      add('rook', 7, 7, 0, 'black');
+      // Kings
       add('king', 4, 0, 0, 'white');
       add('king', 4, 7, 0, 'black');
     }
@@ -96,25 +97,33 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
         ctx.fillText(p.type[0].toUpperCase(), (x + 0.45) * cellW, (y + 0.6) * cellH);
       });
 
-      // animated piece (during undo/redo replay)
-      if (animationRef.current && animationRef.current.level === z) {
+      // animated piece (during undo/redo replay or castling)
+      if (animationRef.current) {
         const now = Date.now();
         const elapsed = now - animationRef.current.startTime;
         const progress = Math.min(elapsed / animationRef.current.duration, 1);
-        const from = animationRef.current.fromPos;
-        const to = animationRef.current.toPos;
-        const interpX = from.x + (to.x - from.x) * progress;
-        const interpY = from.y + (to.y - from.y) * progress;
-        ctx.beginPath();
-        ctx.arc((interpX + 0.5) * cellW, (interpY + 0.5) * cellH, Math.min(cellW, cellH) * 0.35, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(76,175,80,0.7)'; // highlight animating piece in green
-        ctx.fill();
-        ctx.strokeStyle = '#4caf50';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 12px Arial';
-        ctx.fillText(animationRef.current.piece[0].toUpperCase(), (interpX + 0.45) * cellW, (interpY + 0.6) * cellH);
+        
+        // Handle multiple simultaneous moves (e.g., castling)
+        const moves = animationRef.current.moves || [animationRef.current];
+        
+        moves.forEach((move) => {
+          if (move.level === z) {
+            const from = move.fromPos;
+            const to = move.toPos;
+            const interpX = from.x + (to.x - from.x) * progress;
+            const interpY = from.y + (to.y - from.y) * progress;
+            ctx.beginPath();
+            ctx.arc((interpX + 0.5) * cellW, (interpY + 0.5) * cellH, Math.min(cellW, cellH) * 0.35, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(76,175,80,0.7)'; // highlight animating piece in green
+            ctx.fill();
+            ctx.strokeStyle = '#4caf50';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 12px Arial';
+            ctx.fillText(move.piece[0].toUpperCase(), (interpX + 0.45) * cellW, (interpY + 0.6) * cellH);
+          }
+        });
       }
 
       // selection highlight
@@ -149,9 +158,52 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
         const to = { x: cx, y: cy, z };
         const destKey = `${to.x},${to.y},${to.z}`;
         const isCapture = piecesRef.current.has(destKey);
+        const ptype = (piece.type || '').toLowerCase();
+        
+        // Check for castling attempt
+        if (ptype === 'king') {
+          const castlingInfo = isCastling(from, to, piece.color);
+          if (castlingInfo.type) {
+            const rookKey = `${castlingInfo.rookFrom.x},${castlingInfo.rookFrom.y},${castlingInfo.rookFrom.z}`;
+            const rook = piecesRef.current.get(rookKey);
+            const rookHasMoved = rook ? rook.hasMoved : true;
+            
+            if (canCastle(piecesRef.current, from, castlingInfo, piece.color, piece.hasMoved, rookHasMoved)) {
+              // Execute castling: move king and rook
+              piecesRef.current.delete(sel.key);
+              piecesRef.current.delete(rookKey);
+              
+              piece.pos = to;
+              piece.hasMoved = true;
+              rook.pos = castlingInfo.rookTo;
+              rook.hasMoved = true;
+              
+              piecesRef.current.set(destKey, piece);
+              const newRookKey = `${castlingInfo.rookTo.x},${castlingInfo.rookTo.y},${castlingInfo.rookTo.z}`;
+              piecesRef.current.set(newRookKey, rook);
+              
+              captureState();
+              setMoveHistory((h) => [...h, { from: sel.pos, to, piece: piece.type, castling: castlingInfo.type }]);
+              setToMove(toMove === 'white' ? 'black' : 'white');
+              
+              // Trigger animation for both pieces
+              animationRef.current = {
+                startTime: Date.now(),
+                duration: 400,
+                moves: [
+                  { fromPos: from, toPos: to, piece: piece.type, level: to.z },
+                  { fromPos: castlingInfo.rookFrom, toPos: castlingInfo.rookTo, piece: 'rook', level: castlingInfo.rookTo.z },
+                ],
+              };
+              
+              selectedRef.current = null;
+              setVersion((v) => v + 1);
+              return;
+            }
+          }
+        }
         
         if (isValidMove(piece.type, from, to, piece.color, isCapture, piece.hasMoved)) {
-          const ptype = (piece.type || '').toLowerCase();
           
           // Check path clearance for sliding pieces
           if ((['rook', 'bishop', 'queen'].includes(ptype)) && !isPathClear(piecesRef.current, from, to)) {
