@@ -338,7 +338,7 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
             <ol style={{ margin: 4, paddingLeft: 20 }}>
               {moveHistory.map((m, i) => (
                 <li key={i}>
-                  {m.piece} ({m.from.x},{m.from.y},{m.from.z})→({m.to.x},{m.to.y},{m.to.z}){m.capColor ? ` x${m.capColor}` : ''}
+                  {m.piece} ({m.from.x},{m.from.y},{m.from.z}){m.capColor ? ' x ' : ' → '}({m.to.x},{m.to.y},{m.to.z})
                 </li>
               ))}
             </ol>
