@@ -14,9 +14,37 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
   const undoStackRef = useRef([]); // stack of game states for undo
   const redoStackRef = useRef([]); // stack of game states for redo
   const animationRef = useRef(null); // current animation state: { startTime, duration, fromPos, toPos, piece, level }
+  const isInitializedRef = useRef(false); // track if we've loaded from storage
 
+  // Load game state from localStorage on mount
   useEffect(() => {
-    // Initialize sample pieces if empty
+    if (isInitializedRef.current) return;
+    isInitializedRef.current = true;
+
+    try {
+      const savedState = localStorage.getItem('chess3d-gamestate');
+      if (savedState) {
+        const state = JSON.parse(savedState);
+        // Restore pieces
+        if (state.pieces && state.pieces.length > 0) {
+          piecesRef.current.clear();
+          state.pieces.forEach(piece => {
+            const key = `${piece.pos.x},${piece.pos.y},${piece.pos.z}`;
+            piecesRef.current.set(key, piece);
+          });
+        }
+        // Restore other state
+        if (state.toMove) setToMove(state.toMove);
+        if (state.moveHistory) setMoveHistory(state.moveHistory);
+        if (state.activeLevel !== undefined) setActiveLevel(state.activeLevel);
+        setVersion(v => v + 1); // trigger redraw
+        return;
+      }
+    } catch (err) {
+      console.warn('Failed to load game state:', err);
+    }
+
+    // If no saved state, initialize with default pieces
     if (piecesRef.current.size === 0) {
       const add = (type, x, y, z, color = 'white') => {
         const key = `${x},${y},${z}`;
@@ -28,6 +56,26 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
       add('queen', 4, 4, 1, 'black');
       add('rook', 7, 7, 2, 'black');
     }
+  }, []);
+
+  // Save game state to localStorage whenever it changes
+  useEffect(() => {
+    if (!isInitializedRef.current) return; // don't save during initial load
+
+    try {
+      const state = {
+        pieces: Array.from(piecesRef.current.values()),
+        toMove,
+        moveHistory,
+        activeLevel,
+      };
+      localStorage.setItem('chess3d-gamestate', JSON.stringify(state));
+    } catch (err) {
+      console.warn('Failed to save game state:', err);
+    }
+  }, [toMove, moveHistory, activeLevel, version]);
+
+  useEffect(() => {
 
     // draw all levels (grid + markers + pieces + selection highlight)
     for (let z = 0; z < levels; z++) {
@@ -199,6 +247,25 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 360 }) => {
     setToMove('white');
     undoStackRef.current = [];
     redoStackRef.current = [];
+    
+    // Clear saved state from localStorage
+    try {
+      localStorage.removeItem('chess3d-gamestate');
+    } catch (err) {
+      console.warn('Failed to clear game state:', err);
+    }
+    
+    // Re-initialize with default pieces
+    const add = (type, x, y, z, color = 'white') => {
+      const key = `${x},${y},${z}`;
+      piecesRef.current.set(key, { id: key, type, color, pos: { x, y, z } });
+    };
+    add('rook', 0, 0, 0, 'white');
+    add('bishop', 2, 2, 0, 'white');
+    add('knight', 1, 0, 0, 'white');
+    add('queen', 4, 4, 1, 'black');
+    add('rook', 7, 7, 2, 'black');
+    
     setVersion((v) => v + 1);
   };
 
