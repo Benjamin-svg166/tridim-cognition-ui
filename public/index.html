@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="description" content="Cognition Board UI" />
+    <!-- Performance optimizations -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+    <!-- Preload critical resources -->
+    <link rel="preload" as="script" href="%PUBLIC_URL%/static/js/bundle.js">
+    <!-- Critical CSS inline for faster first paint -->
+    <style>
+      body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:#f5f5f5;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+      #root{min-height:100vh;display:flex;flex-direction:column;padding:10px;max-width:1400px;margin:0 auto}
+      .loading-container{flex:1;display:flex;flex-direction:column;gap:20px}
+      .loading-header{text-align:center;margin:0 0 16px 0;font-size:1.2em;font-weight:500;min-height:29px;line-height:1.2}
+      .loading-hero{padding:80px 60px;text-align:center;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:12px;min-height:600px;max-width:900px;margin:0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 10px 40px rgba(0,0,0,0.2)}
+      .loading-icons{font-size:64px;margin-bottom:30px}
+      .loading-title{font-size:32px;font-weight:600;color:white;margin-bottom:15px}
+      .loading-subtitle{font-size:18px;color:rgba(255,255,255,0.9)}
+      canvas{transform:translateZ(0);will-change:transform}
+      *{box-sizing:border-box}
+    </style>
+    <title>Cognition Board</title>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+  </body>
+</html>

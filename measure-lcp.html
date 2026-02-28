@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LCP Measurement</title>
+  <script>
+    // Measure LCP automatically
+    new PerformanceObserver((list) => {
+      const entries = list.getEntries();
+      const lastEntry = entries[entries.length - 1];
+      console.log('🎯 LCP:', lastEntry.renderTime || lastEntry.loadTime, 'ms');
+      
+      // Display on page
+      setTimeout(() => {
+        const lcpValue = (lastEntry.renderTime || lastEntry.loadTime) / 1000;
+        const lcpDiv = document.createElement('div');
+        lcpDiv.style.cssText = 'position:fixed;top:10px;right:10px;background:black;color:white;padding:15px;border-radius:8px;font-size:14px;z-index:9999;font-family:monospace;';
+        lcpDiv.innerHTML = `
+          <strong>LCP: ${lcpValue.toFixed(2)}s</strong><br>
+          <span style="color:${lcpValue < 2.5 ? '#4ade80' : lcpValue < 4 ? '#fb923c' : '#f87171'}">
+            ${lcpValue < 2.5 ? '✅ Good' : lcpValue < 4 ? '⚠️ Needs Improvement' : '❌ Poor'}
+          </span>
+        `;
+        document.body.appendChild(lcpDiv);
+      }, 100);
+    }).observe({ type: 'largest-contentful-paint', buffered: true });
+  </script>
+</head>
+<body>
+  <h1>Measuring LCP - Open build/index.html in browser</h1>
+  <p>This page measures Largest Contentful Paint (LCP) performance metric.</p>
+  <ol>
+    <li>Run: <code>npx serve -s build</code></li>
+    <li>Open: <code>http://localhost:3000</code></li>
+    <li>Check console and top-right corner for LCP value</li>
+    <li>Goal: LCP &lt; 2.5s (Good), &lt; 4s (Needs Improvement)</li>
+  </ol>
+</body>
+</html>

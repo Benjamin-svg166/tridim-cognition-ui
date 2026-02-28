@@ -1,0 +1,13 @@
+import React from 'react';
+import BoardRenderer from './BoardRenderer';
+
+function App() {
+  console.log('App.js loaded');
+  return (
+    <div className="App">
+      <BoardRenderer />
+    </div>
+  );
+}
+
+export default App;
