@@ -2,6 +2,49 @@
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
+## Prerequisites — Install Node.js & npm
+
+`npm` is bundled with [Node.js](https://nodejs.org/). If you see an error like:
+
+```
+npm : The term 'npm' is not recognized as the name of a cmdlet, function, script file, or operable program.
+```
+
+Node.js is not installed or not on your system PATH. Follow the steps below for your platform.
+
+### Windows
+
+1. Download the **LTS installer** from <https://nodejs.org/en/download>.
+2. Run the installer and keep the default options (make sure *"Add to PATH"* is checked).
+3. Open a **new** PowerShell or Command Prompt window and verify:
+   ```powershell
+   node --version   # should print v20.x.x or later
+   npm --version    # should print 10.x.x or later
+   ```
+
+> **Tip (advanced):** If you manage multiple Node versions, install [nvm-windows](https://github.com/coreybutler/nvm-windows), then run:
+> ```powershell
+> nvm install 20
+> nvm use 20
+> ```
+
+### macOS / Linux
+
+Install via [nvm](https://github.com/nvm-sh/nvm):
+
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+# restart your terminal, then:
+nvm install 20
+nvm use 20
+```
+
+Or download the installer from <https://nodejs.org/en/download>.
+
+The required Node.js version is pinned in `.nvmrc` (currently **20**).
+
+---
+
 ## Available Scripts
 
 In the project directory, you can run:
