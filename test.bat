@@ -1,2 +1,2 @@
 @echo off
-cmd /c npm test -- --watchAll=false
+npm test -- --watchAll=false

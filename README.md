@@ -51,10 +51,8 @@ test.bat    # runs the test suite
 build.bat   # builds the production bundle
 ```
 
-**Option 3 – Use Windows Command Prompt (cmd.exe) instead of PowerShell:**
-```
-cmd /c npm start
-```
+**Option 3 – Open Windows Command Prompt (cmd.exe) instead of PowerShell:**
+Press `Win + R`, type `cmd`, and run `npm start` from there.
 
 ### Features
 - Multi-level board rendering on canvas.

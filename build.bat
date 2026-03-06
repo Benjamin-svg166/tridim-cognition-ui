@@ -1,2 +1,2 @@
 @echo off
-cmd /c npm run build
+npm run build
