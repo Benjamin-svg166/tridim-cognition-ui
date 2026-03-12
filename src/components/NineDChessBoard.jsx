@@ -115,22 +115,22 @@ const NineDChessBoard = ({ size = 8, levels = 9, canvasSize = 240, showControlPa
     whiteLevels.forEach(z => {
       // White back rank
       [[0, 'rook'], [1, 'knight'], [2, 'bishop'], [3, 'queen'], [4, 'king'], [5, 'bishop'], [6, 'knight'], [7, 'rook']].forEach(([x, type]) => {
-        startPieces.set(`${x},0,${z}`, { type, color: 'white', hasMoved: false });
+        startPieces.set(`${x},0,${z}`, { type, color: 'white', pos: { x, y: 0, z }, hasMoved: false });
       });
       // White pawns
       for (let x = 0; x < 8; x++) {
-        startPieces.set(`${x},1,${z}`, { type: 'pawn', color: 'white', hasMoved: false });
+        startPieces.set(`${x},1,${z}`, { type: 'pawn', color: 'white', pos: { x, y: 1, z }, hasMoved: false });
       }
     });
 
     blackLevels.forEach(z => {
       // Black pawns
       for (let x = 0; x < 8; x++) {
-        startPieces.set(`${x},6,${z}`, { type: 'pawn', color: 'black', hasMoved: false });
+        startPieces.set(`${x},6,${z}`, { type: 'pawn', color: 'black', pos: { x, y: 6, z }, hasMoved: false });
       }
       // Black back rank
       [[0, 'rook'], [1, 'knight'], [2, 'bishop'], [3, 'queen'], [4, 'king'], [5, 'bishop'], [6, 'knight'], [7, 'rook']].forEach(([x, type]) => {
-        startPieces.set(`${x},7,${z}`, { type, color: 'black', hasMoved: false });
+        startPieces.set(`${x},7,${z}`, { type, color: 'black', pos: { x, y: 7, z }, hasMoved: false });
       });
     });
 
