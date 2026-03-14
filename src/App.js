@@ -6,6 +6,7 @@ import NineDChessBoard from './components/NineDChessBoard';
 const ThreeDVisualizer = lazy(() => import('./components/ThreeDVisualizer'));
 const NineDVisualizer = lazy(() => import('./components/NineDVisualizer'));
 const ThreeDChessGame = lazy(() => import('./components/ThreeDChessGame'));
+const NineDChessGame3D = lazy(() => import('./components/NineDChessGame3D'));
 
 function App() {
   // Check URL parameter for initial mode
@@ -16,23 +17,25 @@ function App() {
   if (modeParam === '9dvisualizer') initialMode = '9dvisualizer';
   if (modeParam === '3dgame') initialMode = '3dgame';
   if (modeParam === '9dgame') initialMode = '9dgame';
+  if (modeParam === '9dgame3d') initialMode = '9dgame3d';
   const [mode, setMode] = useState(initialMode);
 
-  // Placeholder style matching actual board container dimensions
+  const is3DMode = mode === 'visualizer' || mode === '3dgame' || mode === '9dvisualizer' || mode === '9dgame3d';
+  
   const placeholderStyle = {
     padding: '80px 60px',
     textAlign: 'center',
     background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     borderRadius: 12,
-    minHeight: (mode === 'visualizer' || mode === '3dgame' || mode === '9dvisualizer') ? '100vh' : 600,
-    height: (mode === 'visualizer' || mode === '3dgame' || mode === '9dvisualizer') ? '100vh' : 600,
+    minHeight: is3DMode ? '100vh' : 600,
+    height: is3DMode ? '100vh' : 600,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
     width: '100%',
-      maxWidth: (mode === 'visualizer' || mode === '3dgame' || mode === '9dvisualizer') ? '100%' : 900,
+    maxWidth: is3DMode ? '100%' : 900,
     margin: '0 auto',
     contain: 'layout size style'
   };
@@ -42,9 +45,9 @@ function App() {
       display: 'flex', 
       flexDirection: 'column', 
       gap: 10, 
-      padding: (mode === 'visualizer' || mode === '3dgame' || mode === '9dvisualizer') ? 0 : 10, 
-      paddingTop: (mode === 'visualizer' || mode === '3dgame' || mode === '9dvisualizer') ? 0 : 0,
-      maxWidth: (mode === 'visualizer' || mode === '3dgame' || mode === '9dvisualizer') ? '100%' : 1400, 
+      padding: is3DMode ? 0 : 10, 
+      paddingTop: is3DMode ? 0 : 0,
+      maxWidth: is3DMode ? '100%' : 1400, 
       margin: '0 auto',
       width: '100%'
     }}>
@@ -59,6 +62,22 @@ function App() {
         gap: '10px'
       }}>
         <button
+          onClick={() => setMode('9dgame3d')}
+          style={{
+            padding: '10px 20px',
+            background: mode === '9dgame3d' ? '#ff1744' : '#333',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: 'pointer',
+            fontWeight: mode === '9dgame3d' ? 'bold' : 'normal',
+            fontSize: '14px'
+          }}
+          title="Play full 9D chess in immersive 3D!"
+        >
+          🌌 9D Chess 3D Game (ULTIMATE!)
+        </button>
+        <button
           onClick={() => setMode('9dgame')}
           style={{
             padding: '10px 20px',
@@ -71,7 +90,7 @@ function App() {
           }}
           title="Play chess in 9 dimensions with 9 stacked boards!"
         >
-          🚀 9D Chess (EPIC!)
+          🚀 9D Chess (2D View)
         </button>
         <button
           onClick={() => setMode('3dgame')}
@@ -142,13 +161,14 @@ function App() {
           marginBottom: 10,
           minHeight: 29,
           lineHeight: 1.2,
-          visibility: (mode === 'visualizer' || mode === '9dvisualizer') ? 'hidden' : 'visible',
-          height: (mode === 'visualizer' || mode === '9dvisualizer') ? 0 : 'auto',
-          overflow: (mode === 'visualizer' || mode === '9dvisualizer') ? 'hidden' : 'visible'
+          visibility: (mode === 'visualizer' || mode === '9dvisualizer' || mode === '9dgame3d') ? 'hidden' : 'visible',
+          height: (mode === 'visualizer' || mode === '9dvisualizer' || mode === '9dgame3d') ? 0 : 'auto',
+          overflow: (mode === 'visualizer' || mode === '9dvisualizer' || mode === '9dgame3d') ? 'hidden' : 'visible'
         }}>
           {mode === 'game' ? '3D Chess Game - Expanded View' : 
            mode === '3dgame' ? 'Full 3D Chess Game' : 
-           mode === '9dgame' ? '🚀 Nine-Dimensional Layered Chess - 9 Stacked Boards!' : 
+           mode === '9dgame' ? '🚀 Nine-Dimensional Layered Chess - 9 Stacked Boards!' :
+           mode === '9dgame3d' ? '🌌 Nine-Dimensional Chess - Full 3D Playable Game' :
            '3D Chess Move Visualizer'}
         </h3>
         <div style={{ 
@@ -159,6 +179,16 @@ function App() {
             <ThreeDChessBoard showControlPanel={true} compactMode={false} />
           ) : mode === '9dgame' ? (
             <NineDChessBoard showControlPanel={true} compactMode={false} />
+          ) : mode === '9dgame3d' ? (
+            <Suspense fallback={
+              <div style={placeholderStyle}>
+                <div style={{ fontSize: 64, marginBottom: 30 }}>🌌🚀♔♕♖</div>
+                <div style={{ fontSize: 32, fontWeight: 600, color: 'white', marginBottom: 15 }}>9D Chess 3D Game</div>
+                <div style={{ fontSize: 18, color: 'rgba(255,255,255,0.9)' }}>Loading ultimate 9-dimensional 3D environment...</div>
+              </div>
+            }>
+              <NineDChessGame3D />
+            </Suspense>
           ) : mode === '3dgame' ? (
             <Suspense fallback={
               <div style={placeholderStyle}>
