@@ -448,16 +448,20 @@ const NineDChessGame3D = () => {
   const makeComputerMove = async () => {
     try {
       const move = useAdvancedAI && (difficulty === 'hard' || difficulty === 'master')
-        ? selectBestMoveAdvanced(piecesRef.current, computerColor, difficulty === 'master' ? 3 : 2)
-        : selectBestMove(piecesRef.current, computerColor, difficulty);
+        ? await selectBestMoveAdvanced(piecesRef.current, computerColor, difficulty === 'master' ? 3 : 2)
+        : await selectBestMove(piecesRef.current, computerColor, difficulty);
 
-      if (move) {
+      if (move && move.from && move.to && move.to.y !== undefined && move.to.z !== undefined) {
         if (canPromote(move.piece, move.to.y, move.to.z)) {
           executeMove(move.from, move.to, 'queen');
         } else {
           executeMove(move.from, move.to);
         }
+      } else {
+        console.warn('Invalid move from AI:', move);
       }
+    } catch (error) {
+      console.error('Error in makeComputerMove:', error);
     } finally {
       setAiThinking(false);
     }
@@ -658,22 +662,51 @@ const NineDChessGame3D = () => {
           </div>
         )}
 
-        {/* AI thinking indicator */}
+        {/* AI thinking indicator - ENHANCED for deep evaluation */}
         {aiThinking && (
           <div style={{
             position: 'absolute',
             bottom: '20px',
             left: '50%',
             transform: 'translateX(-50%)',
-            background: 'rgba(0,0,0,0.8)',
+            background: 'rgba(255, 87, 34, 0.95)',
             color: 'white',
-            padding: '10px 20px',
-            borderRadius: '5px',
-            fontSize: '14px'
+            padding: '20px 30px',
+            borderRadius: '10px',
+            fontSize: '18px',
+            fontWeight: 'bold',
+            boxShadow: '0 4px 20px rgba(255, 87, 34, 0.5)',
+            zIndex: 1000,
+            animation: 'pulse 1.5s ease-in-out infinite'
           }}>
-            AI thinking...
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <div style={{ 
+                width: '24px', 
+                height: '24px', 
+                border: '3px solid white', 
+                borderTop: '3px solid transparent',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite'
+              }}></div>
+              <div>
+                <div>🧠 AI Deep Thinking...</div>
+                <div style={{ fontSize: '12px', opacity: 0.9, marginTop: '5px' }}>
+                  Evaluating hundreds of moves across 9 dimensions
+                </div>
+              </div>
+            </div>
           </div>
         )}
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+          }
+        `}</style>
       </div>
 
       {/* Control Panel */}

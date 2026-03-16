@@ -93,16 +93,19 @@ export function evaluatePosition(piecesMap, color) {
 }
 
 /**
- * Select best move using simple evaluation
+ * Select best move using FULL evaluation with deep thinking
  * Returns the move object or null if no moves available
+ * WARNING: For 9D chess with 96 pieces, this may take 30-60 seconds per move!
  */
 export function selectBestMove(piecesMap, color, difficulty = 'easy') {
   const legalMoves = getAllLegalMoves(piecesMap, color);
   
   if (legalMoves.length === 0) return null;
   
+  console.log(`🤖 AI thinking... Evaluating ${legalMoves.length} legal moves for ${color} (difficulty: ${difficulty})`);
+  
   if (difficulty === 'easy') {
-    // Random move
+    // Random move for easy difficulty
     return legalMoves[Math.floor(Math.random() * legalMoves.length)];
   }
   
