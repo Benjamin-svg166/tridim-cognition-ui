@@ -219,6 +219,7 @@ const NineDChessGame3D = () => {
   const [hintMove, setHintMove] = useState(null);
   const [aiThinking, setAiThinking] = useState(false);
   const [showNotation, setShowNotation] = useState(true);
+  const [drawOfferedBy, setDrawOfferedBy] = useState(null); // 'white', 'black', or null
   
   const hasInitialized = useRef(false);
 
@@ -312,7 +313,7 @@ const NineDChessGame3D = () => {
         const to = { x, y, z };
 
         // Check for pawn promotion
-        if (canPromote(selectedPiece, to.y, to.z)) {
+        if (selectedPiece.type === 'pawn' && canPromote(to, selectedPiece.color)) {
           setPromotionPending({ from, to, piece: selectedPiece });
           setSelectedSquare(null);
           setHighlightedMoves([]);
@@ -350,7 +351,7 @@ const NineDChessGame3D = () => {
           const isCapture = targetPiece && targetPiece.color !== piece.color;
           
           if (isValidMove(piece.type, { x, y, z }, { x: tx, y: ty, z: tz }, piece.color, isCapture, piece.hasMoved) &&
-              isPathClear({ x, y, z }, { x: tx, y: ty, z: tz }, piecesRef.current) &&
+              isPathClear(piecesRef.current, { x, y, z }, { x: tx, y: ty, z: tz }, piece.type) &&
               !wouldBeInCheckAfterMove(piecesRef.current, { x, y, z }, { x: tx, y: ty, z: tz }, piece.color)) {
             validMoves.push({ x: tx, y: ty, z: tz });
           }
@@ -421,6 +422,7 @@ const NineDChessGame3D = () => {
     setToMove(nextPlayer);
     setVersion(v => v + 1);
     moveStartTimeRef.current = Date.now();
+    setDrawOfferedBy(null); // Clear any pending draw offers after a move
   };
 
   // Format move notation
@@ -448,11 +450,11 @@ const NineDChessGame3D = () => {
   const makeComputerMove = async () => {
     try {
       const move = useAdvancedAI && (difficulty === 'hard' || difficulty === 'master')
-        ? selectBestMoveAdvanced(piecesRef.current, computerColor, difficulty === 'master' ? 3 : 2)
+        ? await selectBestMoveAdvanced(piecesRef.current, computerColor, difficulty)
         : selectBestMove(piecesRef.current, computerColor, difficulty);
 
       if (move) {
-        if (canPromote(move.piece, move.to.y, move.to.z)) {
+        if (move.piece === 'pawn' && canPromote(move.to, computerColor)) {
           executeMove(move.from, move.to, 'queen');
         } else {
           executeMove(move.from, move.to);
@@ -525,6 +527,7 @@ const NineDChessGame3D = () => {
     setHintMove(null);
     setMoveTimer({ white: 0, black: 0 });
     moveStartTimeRef.current = Date.now();
+    setDrawOfferedBy(null);
   };
 
   // Save/Load
@@ -555,6 +558,29 @@ const NineDChessGame3D = () => {
       setVersion(v => v + 1);
       alert('Game loaded!');
     }
+  };
+
+  // Draw offer management
+  const offerDraw = () => {
+    if (gameStatus) return; // Can't offer draw if game is over
+    if (gameMode === 'pvc' && toMove === computerColor) return; // Can't offer on computer's turn
+    
+    setDrawOfferedBy(toMove);
+    alert(`${toMove.toUpperCase()} offers a draw!`);
+  };
+
+  const acceptDraw = () => {
+    if (!drawOfferedBy) return;
+    setGameStatus('Draw by agreement');
+    setDrawOfferedBy(null);
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+    }
+  };
+
+  const declineDraw = () => {
+    setDrawOfferedBy(null);
+    alert('Draw offer declined.');
   };
 
   // Timer
@@ -696,6 +722,49 @@ const NineDChessGame3D = () => {
             <button onClick={generateHint} style={buttonStyle}>Hint</button>
             <button onClick={saveGame} style={buttonStyle}>Save</button>
             <button onClick={loadGame} style={buttonStyle}>Load</button>
+          </div>
+          
+          {/* Draw Controls */}
+          <div style={{ marginTop: '10px', display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+            {!drawOfferedBy && !gameStatus && (
+              <button 
+                onClick={offerDraw} 
+                disabled={gameMode === 'pvc' && toMove === computerColor}
+                style={{
+                  ...buttonStyle,
+                  background: '#ff9800',
+                  opacity: (gameMode === 'pvc' && toMove === computerColor) ? 0.5 : 1,
+                  cursor: (gameMode === 'pvc' && toMove === computerColor) ? 'not-allowed' : 'pointer'
+                }}
+              >
+                Offer Draw
+              </button>
+            )}
+            {drawOfferedBy && drawOfferedBy !== toMove && (
+              <>
+                <button onClick={acceptDraw} style={{ ...buttonStyle, background: '#4caf50' }}>
+                  Accept Draw
+                </button>
+                <button onClick={declineDraw} style={{ ...buttonStyle, background: '#f44336' }}>
+                  Decline Draw
+                </button>
+              </>
+            )}
+            {drawOfferedBy && (
+              <div style={{ 
+                fontSize: '11px', 
+                color: '#ff9800', 
+                padding: '8px', 
+                background: '#2d2d2d', 
+                borderRadius: '5px',
+                width: '100%',
+                marginTop: '5px'
+              }}>
+                {drawOfferedBy === toMove 
+                  ? `You offered a draw. Waiting for opponent...` 
+                  : `${drawOfferedBy.toUpperCase()} offers a draw!`}
+              </div>
+            )}
           </div>
         </div>
 
