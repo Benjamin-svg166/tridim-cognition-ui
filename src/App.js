@@ -19,6 +19,7 @@ function App() {
   if (modeParam === '9dgame') initialMode = '9dgame';
   if (modeParam === '9dgame3d') initialMode = '9dgame3d';
   const [mode, setMode] = useState(initialMode);
+  const [showMenu, setShowMenu] = useState(true);
 
   const is3DMode = mode === 'visualizer' || mode === '3dgame' || mode === '9dvisualizer' || mode === '9dgame3d';
   
@@ -51,17 +52,41 @@ function App() {
       margin: '0 auto',
       width: '100%'
     }}>
+      {/* Menu Toggle Button - Always Visible */}
+      <button
+        onClick={() => setShowMenu(!showMenu)}
+        style={{
+          position: 'absolute',
+          top: 20,
+          right: 20,
+          zIndex: 2001,
+          padding: '10px 15px',
+          background: showMenu ? '#ff1744' : '#4caf50',
+          color: 'white',
+          border: 'none',
+          borderRadius: '5px',
+          cursor: 'pointer',
+          fontWeight: 'bold',
+          fontSize: '16px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+        }}
+        title={showMenu ? 'Hide game menu' : 'Show game menu'}
+      >
+        {showMenu ? '✖️ Close' : '☰ Menu'}
+      </button>
+
       {/* Mode Toggle Buttons */}
-      <div style={{
-        position: 'absolute',
-        top: 20,
-        right: 20,
-        zIndex: 2000,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '10px'
-      }}>
-        <button
+      {showMenu && (
+        <div style={{
+          position: 'absolute',
+          top: 70,
+          right: 20,
+          zIndex: 2000,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px'
+        }}>
+          <button
           onClick={() => setMode('9dgame3d')}
           style={{
             padding: '10px 20px',
@@ -151,7 +176,8 @@ function App() {
         >
           🎮 Chess Game
         </button>
-      </div>
+        </div>
+      )}
 
       <div style={{ width: '100%', paddingTop: 0, marginTop: 0 }}>
         {/* Reserve space for heading to prevent CLS */}

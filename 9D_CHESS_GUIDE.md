@@ -159,6 +159,22 @@ Pawns follow traditional chess rules but are **locked to their birth level**:
 - Pin a piece along a 3D diagonal that crosses multiple levels
 - Example: Bishop at (0,0,0) pins piece at (3,3,3) to king at (7,7,7)
 
+### Absolute Hyper‑Cube Mate ⚡
+- **The ultimate multi-king checkmate pattern discovered in 9D chess**
+- A single attacking piece (typically Queen or Rook) simultaneously puts **multiple enemy kings** in checkmate on the same axis
+- No matter which king moves, at least one remains in checkmate - an inescapable trap!
+- **Classic Example**: 
+  - White Queen at C8z4
+  - Black Kings at C5z4 and C1z4
+  - Both kings are in checkmate simultaneously along the C-file
+  - Any Black move leaves at least one king in mate
+- **Requirements**:
+  - Two or more enemy kings aligned on same file, rank, or diagonal
+  - Attacker controls entire line with no escape squares
+  - Named for the hypercubic geometry of 9D chess space
+- **Rarity**: Extremely rare but devastating when achieved
+- **Historical Note**: Pattern named March 2026
+
 ### Level Dominance
 - Control an entire level with your pieces
 - Forces opponent to avoid that altitude band
