@@ -348,6 +348,10 @@ const NineDChessGame3D = () => {
         for (let tz = 0; tz < 9; tz++) {
           const targetKey = `${tx},${ty},${tz}`;
           const targetPiece = piecesRef.current.get(targetKey);
+          
+          // Skip if target square has our own piece
+          if (targetPiece && targetPiece.color === piece.color) continue;
+          
           const isCapture = targetPiece && targetPiece.color !== piece.color;
           
           if (isValidMove(piece.type, { x, y, z }, { x: tx, y: ty, z: tz }, piece.color, isCapture, piece.hasMoved) &&
@@ -368,6 +372,12 @@ const NineDChessGame3D = () => {
     const toKey = `${to.x},${to.y},${to.z}`;
     const piece = piecesRef.current.get(fromKey);
     const captured = piecesRef.current.get(toKey);
+
+    // CRITICAL: Prevent capturing your own pieces
+    if (captured && captured.color === piece.color) {
+      console.error('Illegal move: Cannot capture your own piece!');
+      return;
+    }
 
     // Record move for undo
     undoStackRef.current.push({
