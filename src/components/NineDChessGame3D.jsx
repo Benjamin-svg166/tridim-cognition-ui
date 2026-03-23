@@ -205,7 +205,7 @@ const NineDChessGame3D = () => {
   
   // Game mode and AI settings
   const [gameMode, setGameMode] = useState('pvc');
-  const [difficulty, setDifficulty] = useState('medium');
+  const [difficulty, setDifficulty] = useState('easy'); // 'easy', 'medium', 'hard', 'master' - DEFAULT TO EASY
   const [computerColor, setComputerColor] = useState('black');
   const [useAdvancedAI, setUseAdvancedAI] = useState(true);
   
