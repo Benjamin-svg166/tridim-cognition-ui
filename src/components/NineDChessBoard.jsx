@@ -94,6 +94,7 @@ const NineDChessBoard = ({ size = 8, levels = 9, canvasSize = 240, showControlPa
   const moveStartTimeRef = useRef(Date.now());
   const [showEvalBar, setShowEvalBar] = useState(true);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
+  const [drawOfferedBy, setDrawOfferedBy] = useState(null); // 'white', 'black', or null
 
   // Check NN status on mount
   useEffect(() => {
@@ -603,6 +604,9 @@ const NineDChessBoard = ({ size = 8, levels = 9, canvasSize = 240, showControlPa
       setLastMove({ from, to });
       moveStartTimeRef.current = Date.now();
       
+      // Clear any pending draw offers after a move
+      setDrawOfferedBy(null);
+      
       const nextPlayer = toMove === 'white' ? 'black' : 'white';
       setToMove(nextPlayer);
       checkGameStatus(nextPlayer);
@@ -644,6 +648,9 @@ const NineDChessBoard = ({ size = 8, levels = 9, canvasSize = 240, showControlPa
     // Update last move for highlighting
     setLastMove({ from, to });
     moveStartTimeRef.current = Date.now();
+    
+    // Clear any pending draw offers after a move
+    setDrawOfferedBy(null);
     
     const nextPlayer = toMove === 'white' ? 'black' : 'white';
     setToMove(nextPlayer);
@@ -976,7 +983,28 @@ toMove,
     setMoveTimer({ white: 0, black: 0 });
     moveStartTimeRef.current = Date.now();
     setPositionEvaluation(0);
+    setDrawOfferedBy(null);
   }, [initializePieces, levels]);
+
+  // Draw offer management
+  const offerDraw = () => {
+    if (gameStatus === 'checkmate' || gameStatus === 'stalemate') return;
+    if (gameMode === 'pvc' && toMove === computerColor) return;
+    setDrawOfferedBy(toMove);
+  };
+
+  const acceptDraw = () => {
+    if (!drawOfferedBy) return;
+    setGameStatus('draw');
+    setDrawOfferedBy(null);
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+    }
+  };
+
+  const declineDraw = () => {
+    setDrawOfferedBy(null);
+  };
 
   return (
     <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
@@ -1187,20 +1215,74 @@ toMove,
               >
                 🔄 Reset Game
               </button>
-              <button 
-                onClick={() => alert('Draw offered! (Feature coming soon)')}
-                style={{ 
-                  padding: '8px 16px',
-                  background: '#6c757d',
-                  color: 'white',
-                  border: 'none',
+              {!drawOfferedBy && !gameStatus && (
+                <button 
+                  onClick={offerDraw}
+                  disabled={gameMode === 'pvc' && toMove === computerColor}
+                  style={{ 
+                    padding: '8px 16px',
+                    background: (gameMode === 'pvc' && toMove === computerColor) ? '#ccc' : '#ff9800',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: (gameMode === 'pvc' && toMove === computerColor) ? 'not-allowed' : 'pointer',
+                    fontSize: '13px'
+                  }}
+                >
+                  🤝 Offer Draw
+                </button>
+              )}
+              {drawOfferedBy && drawOfferedBy !== toMove && (
+                <>
+                  <button 
+                    onClick={acceptDraw}
+                    style={{ 
+                      padding: '8px 16px',
+                      marginRight: '8px',
+                      background: '#4caf50',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    ✓ Accept Draw
+                  </button>
+                  <button 
+                    onClick={declineDraw}
+                    style={{ 
+                      padding: '8px 16px',
+                      background: '#f44336',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    ✗ Decline Draw
+                  </button>
+                </>
+              )}
+              {drawOfferedBy && (
+                <div style={{ 
+                  marginTop: '10px',
+                  padding: '10px',
+                  background: '#fff3cd',
+                  border: '1px solid #ffc107',
                   borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '13px'
-                }}
-              >
-                🤝 Offer Draw
-              </button>
+                  fontSize: '12px',
+                  color: '#856404',
+                  fontWeight: 'bold'
+                }}>
+                  {drawOfferedBy === toMove 
+                    ? `You offered a draw. Waiting for opponent...` 
+                    : `${drawOfferedBy.toUpperCase()} offers a draw!`}
+                </div>
+              )}
             </div>
             
             {/* Advanced Controls */}
