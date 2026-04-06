@@ -203,11 +203,20 @@ const NineDChessGame3D = () => {
   const [gameStatus, setGameStatus] = useState(null);
   const [lastMove, setLastMove] = useState(null);
   
-  // Game mode and AI settings
-  const [gameMode, setGameMode] = useState('pvc');
-  const [difficulty, setDifficulty] = useState('easy'); // 'easy', 'medium', 'hard', 'master' - DEFAULT TO EASY
-  const [computerColor, setComputerColor] = useState('black');
-  const [useAdvancedAI, setUseAdvancedAI] = useState(true);
+  // Game mode and AI settings (with localStorage persistence)
+  const [gameMode, setGameMode] = useState(() => {
+    return localStorage.getItem('9dchess_gameMode') || 'pvc';
+  });
+  const [difficulty, setDifficulty] = useState(() => {
+    return localStorage.getItem('9dchess_difficulty') || 'medium';
+  });
+  const [computerColor, setComputerColor] = useState(() => {
+    return localStorage.getItem('9dchess_computerColor') || 'black';
+  });
+  const [useAdvancedAI, setUseAdvancedAI] = useState(() => {
+    const saved = localStorage.getItem('9dchess_useAdvancedAI');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
   
   // Advanced features
   const [positionEvaluation, setPositionEvaluation] = useState(0);
@@ -262,6 +271,23 @@ const NineDChessGame3D = () => {
       hasInitialized.current = true;
     }
   }, [initializePieces]);
+
+  // Persist game mode and AI settings to localStorage
+  useEffect(() => {
+    localStorage.setItem('9dchess_gameMode', gameMode);
+  }, [gameMode]);
+
+  useEffect(() => {
+    localStorage.setItem('9dchess_difficulty', difficulty);
+  }, [difficulty]);
+
+  useEffect(() => {
+    localStorage.setItem('9dchess_computerColor', computerColor);
+  }, [computerColor]);
+
+  useEffect(() => {
+    localStorage.setItem('9dchess_useAdvancedAI', JSON.stringify(useAdvancedAI));
+  }, [useAdvancedAI]);
 
   // Calculate material count
   const calculateMaterial = useCallback(() => {
