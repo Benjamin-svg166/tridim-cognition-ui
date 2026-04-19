@@ -165,6 +165,23 @@ const ThreeDChessGame = () => {
         hasInitialized.current = true;
         setVersion(v => v + 1);
         console.log('Game restored from localStorage');
+        
+        // Debug: Check what piece is at f6z6 (5,5,6)
+        const pieceAtF6Z6 = piecesRef.current.get('5,5,6');
+        if (pieceAtF6Z6) {
+          console.log(`[DEBUG] Piece at f6z6 (5,5,6): ${pieceAtF6Z6.color} ${pieceAtF6Z6.type}`);
+        } else {
+          console.log('[DEBUG] No piece at f6z6 (5,5,6)');
+        }
+        
+        // Debug: Check what piece is at d5z6 (3,4,6)
+        const pieceAtD5Z6 = piecesRef.current.get('3,4,6');
+        if (pieceAtD5Z6) {
+          console.log(`[DEBUG] Piece at d5z6 (3,4,6): ${pieceAtD5Z6.color} ${pieceAtD5Z6.type}`);
+        } else {
+          console.log('[DEBUG] No piece at d5z6 (3,4,6)');
+        }
+        
         return;
       }
     } catch (error) {

@@ -39,7 +39,19 @@ export function isKnightMove(from, to) {
 
 // Queen: combination of rook and bishop in 3D
 export function isQueenMove(from, to) {
-  return isRookMove(from, to) || isBishopMove(from, to);
+  const rookMove = isRookMove(from, to);
+  const bishopMove = isBishopMove(from, to);
+  const result = rookMove || bishopMove;
+  
+  // Debug logging for the specific case
+  const isDebugCase = from.x === 3 && from.y === 4 && from.z === 6 && 
+                      to.x === 5 && to.y === 5 && to.z === 6;
+  if (isDebugCase) {
+    const d = absDelta(from, to);
+    console.log(`[DEBUG] isQueenMove (3,4,6)→(5,5,6): delta=(${d.x},${d.y},${d.z}), rookMove=${rookMove}, bishopMove=${bishopMove}, result=${result}`);
+  }
+  
+  return result;
 }
 
 // Pawn: forward movement (1 or 2 from start), diagonal capture
@@ -120,6 +132,12 @@ export function findKing(piecesMap, color) {
 // attackingColor: color of pieces that might be attacking
 // Returns: boolean
 export function isSquareUnderAttack(piecesMap, targetPos, attackingColor) {
+  // Debug logging for the specific case user reported
+  const debugTarget = targetPos.x === 5 && targetPos.y === 5 && targetPos.z === 6;
+  if (debugTarget) {
+    console.log(`[DEBUG] Checking if square (5,5,6) is under attack by ${attackingColor}`);
+  }
+  
   for (const [, piece] of piecesMap.entries()) {
     if (piece.color !== attackingColor) continue;
     
@@ -147,14 +165,32 @@ export function isSquareUnderAttack(piecesMap, targetPos, attackingColor) {
       canAttack = isValidMove(type, pos, targetPos, attackingColor, false, false);
     }
     
+    // Debug logging for queen specifically
+    if (debugTarget && type === 'queen') {
+      const d = absDelta(pos, targetPos);
+      console.log(`[DEBUG] Queen at (${pos.x},${pos.y},${pos.z}) checking (5,5,6): delta=(${d.x},${d.y},${d.z}), canAttack=${canAttack}`);
+    }
+    
     if (!canAttack) continue;
     
     // For sliding pieces (rook, bishop, queen), check path is clear
     if (['rook', 'bishop', 'queen'].includes(type)) {
-      if (!isPathClear(piecesMap, pos, targetPos)) continue;
+      const pathClear = isPathClear(piecesMap, pos, targetPos);
+      if (debugTarget && type === 'queen') {
+        console.log(`[DEBUG] Queen path clear: ${pathClear}`);
+      }
+      if (!pathClear) continue;
+    }
+    
+    if (debugTarget) {
+      console.log(`[DEBUG] Attack confirmed from ${type} at (${pos.x},${pos.y},${pos.z})`);
     }
     
     return true; // Found an attacking piece
+  }
+  
+  if (debugTarget) {
+    console.log(`[DEBUG] No attacking pieces found for (5,5,6)`);
   }
   
   return false;

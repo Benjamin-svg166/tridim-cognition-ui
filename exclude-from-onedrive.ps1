@@ -3,7 +3,7 @@
 
 Write-Host "Excluding folders from OneDrive sync..." -ForegroundColor Cyan
 
-$projectRoot = "c:\Users\bussi\Documents\cognition-board-ui-react"
+$projectRoot = "c:\Users\bussi\OneDrive\Documents\tridim-cognition-ui"
 
 $foldersToExclude = @(
     "$projectRoot\node_modules",
