@@ -593,6 +593,8 @@ const NineDChessGame3D = () => {
       undoStackRef.current = gameState.undoStack;
       setMaterialCount(gameState.materialCount);
       setPositionEvaluation(gameState.positionEvaluation);
+      setGameStatus(null); // Clear game over status
+      setDrawOfferedBy(null); // Clear any pending draw offers
       setVersion(v => v + 1);
       alert('Game loaded!');
     }
