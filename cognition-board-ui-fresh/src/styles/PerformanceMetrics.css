@@ -1,0 +1,157 @@
+.metrics-container {
+  width: 100%;
+  padding: 60px 40px;
+  background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+  border-radius: 12px;
+  margin: 40px 0;
+}
+
+.metrics-header {
+  text-align: center;
+  margin-bottom: 50px;
+}
+
+.metrics-header h2 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #FF006E 0%, #FB5607 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 0 0 15px 0;
+}
+
+.metrics-header p {
+  font-size: 1.1rem;
+  color: #b0b0b0;
+  margin: 0;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 25px;
+  margin-bottom: 40px;
+}
+
+.metric-card {
+  padding: 30px 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  border-top: 3px solid;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  opacity: 0;
+  transform: translateY(20px);
+  cursor: pointer;
+}
+
+.metric-card.visible {
+  opacity: 1;
+  transform: translateY(0);
+  animation: metricCardIn 0.6s ease forwards;
+}
+
+.metric-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-5px);
+  border-top-width: 4px;
+}
+
+.metric-glow {
+  position: absolute;
+  top: -50%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 200%;
+  height: 200%;
+  opacity: 0;
+  border-radius: 50%;
+  transition: opacity 0.3s ease;
+  filter: blur(40px);
+}
+
+.metric-card:hover .metric-glow {
+  opacity: 0.15;
+}
+
+.metric-icon {
+  font-size: 2.5rem;
+  margin-bottom: 15px;
+  display: block;
+}
+
+.metric-value {
+  font-size: 2.2rem;
+  font-weight: 700;
+  margin: 10px 0 5px 0;
+  letter-spacing: 1px;
+}
+
+.metric-unit {
+  font-size: 0.85rem;
+  color: #888;
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+
+.metric-label {
+  font-size: 1rem;
+  color: #d0d0d0;
+  font-weight: 600;
+  margin: 0;
+}
+
+.metrics-footer {
+  text-align: center;
+  padding-top: 30px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.metrics-footer p {
+  color: #888;
+  font-size: 0.95rem;
+  margin: 0;
+  font-style: italic;
+}
+
+@keyframes metricCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .metrics-container {
+    padding: 30px 20px;
+  }
+
+  .metrics-header h2 {
+    font-size: 1.8rem;
+  }
+
+  .metrics-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+  }
+
+  .metric-card {
+    padding: 20px 15px;
+  }
+
+  .metric-value {
+    font-size: 1.8rem;
+  }
+
+  .metric-icon {
+    font-size: 2rem;
+  }
+}

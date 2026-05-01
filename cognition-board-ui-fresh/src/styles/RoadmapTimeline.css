@@ -1,0 +1,287 @@
+.timeline-container {
+  width: 100%;
+  padding: 60px 40px;
+  background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+  border-radius: 12px;
+  margin: 40px 0;
+}
+
+.timeline-header {
+  text-align: center;
+  margin-bottom: 50px;
+}
+
+.timeline-header h2 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #3A86FF 0%, #00D9FF 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 0 0 15px 0;
+}
+
+.timeline-header p {
+  font-size: 1.1rem;
+  color: #b0b0b0;
+  margin: 0;
+}
+
+.timeline-wrapper {
+  position: relative;
+  margin-bottom: 40px;
+}
+
+.timeline-line {
+  position: absolute;
+  top: 50px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #3A86FF, #9D4EDD, #00D9FF, transparent);
+  z-index: 0;
+}
+
+.phases-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 30px;
+  position: relative;
+  z-index: 1;
+}
+
+.phase-card {
+  padding: 30px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.phase-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.1), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.phase-card.active::before {
+  opacity: 1;
+}
+
+.phase-dot {
+  position: absolute;
+  top: 30px;
+  right: 30px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.phase-card.current .phase-dot {
+  animation: pulse 1s ease-in-out infinite;
+  box-shadow: 0 0 15px currentColor;
+}
+
+.phase-card.future .phase-dot {
+  animation: none;
+  opacity: 0.5;
+}
+
+.phase-header-section {
+  margin-bottom: 20px;
+}
+
+.phase-label {
+  display: inline-block;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: #00D9FF;
+  margin-bottom: 10px;
+}
+
+.phase-card h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 10px 0 8px 0;
+  color: #fff;
+}
+
+.phase-timing {
+  font-size: 0.95rem;
+  color: #888;
+  margin: 0;
+  font-weight: 500;
+}
+
+.milestones {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
+.milestones.expanded {
+  max-height: 300px;
+}
+
+.milestones-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 15px 0 10px 0;
+  display: none;
+}
+
+.phase-card.active .milestones-title {
+  display: block;
+}
+
+.milestone-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 8px 0;
+  font-size: 0.9rem;
+  color: #d0d0d0;
+  opacity: 0;
+  animation: slideInMilestone 0.3s ease forwards;
+}
+
+.phase-card.active .milestone-item {
+  opacity: 1;
+}
+
+.milestone-item:nth-child(1) {
+  animation-delay: 0.05s;
+}
+
+.milestone-item:nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+.milestone-item:nth-child(3) {
+  animation-delay: 0.15s;
+}
+
+.milestone-bullet {
+  min-width: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+.status-badge {
+  position: absolute;
+  bottom: 15px;
+  right: 15px;
+  padding: 6px 12px;
+  background: inherit;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #000;
+  letter-spacing: 0.5px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.phase-card.active .status-badge {
+  opacity: 1;
+}
+
+.phase-card.current {
+  background: rgba(0, 217, 255, 0.08);
+}
+
+.phase-card.future {
+  opacity: 0.7;
+}
+
+.phase-card.future:hover {
+  opacity: 1;
+}
+
+.timeline-footer {
+  text-align: center;
+  padding-top: 30px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.timeline-footer p {
+  color: #888;
+  font-size: 0.95rem;
+  margin: 0;
+  font-style: italic;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.7;
+  }
+}
+
+@keyframes slideInMilestone {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .timeline-container {
+    padding: 30px 20px;
+  }
+
+  .timeline-header h2 {
+    font-size: 1.8rem;
+  }
+
+  .timeline-line {
+    display: none;
+  }
+
+  .phases-container {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .phase-card {
+    padding: 25px;
+  }
+
+  .phase-dot {
+    top: 20px;
+    right: 20px;
+  }
+
+  .phase-card h3 {
+    font-size: 1.3rem;
+  }
+}
