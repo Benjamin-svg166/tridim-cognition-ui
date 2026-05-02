@@ -202,53 +202,7 @@ outputs:
    - Indexed by (piece_type, square, game_phase)
    - Center control, king safety, pawn structure
 
-3. **Feature Extractors**:
-   - **Center Control**: Distance from center squares (3,3,3), (4,4,4), (3,4,4), etc.
-   - **Board Level Control**: Bonus for penetrating enemy levels
-   - **Mobility**: Count of legal moves (from MVA)
-   - **King Safety**: Exposed king penalty calculator
-   - **Pawn Structure**: Connected pawns, passed pawns, isolated pawns
-
-**Execution Pipeline**:
-```
-Clock 0: Load board state from memory
-Clock 1: Count material (parallel)
-Clock 2: Calculate piece-square bonuses (parallel)
-Clock 3: Extract positional features (parallel)
-Clock 4: Weighted sum with evaluation weights
-Clock 5: Output final score
-
-Latency: 6 cycles @ 2.5 GHz = 2.4 nanoseconds
-```
-
----
-
-### C. 3D Graphics Rendering Pipeline
-**Purpose**: Real-time visualization of 9D chess in 3D space
-
-**GPU Core**: ARM Mali-G78 (24 cores)
-- **Shading**: 6 TFLOPS FP32
-- **Ray Tracing**: Hardware RT cores for reflections/shadows
-- **Texture Units**: 16 TMUs
-- **ROPs**: 8 Render Output Units
-
-**9D Chess Rendering Features**:
-
-1. **Layer Management**:
-   - 9 transparent chess boards stacked vertically
-   - Dynamic camera orbiting (Three.js compatible)
-   - Opacity blending for inactive levels
-
-2. **Piece Rendering**:
-   - 3D chess piece models (instanced rendering)
-   - Per-piece materials (PBR shading)
-   - Glow effects for valid moves (compute shader)
-
-3. **Move Visualization**:
-   - Highlighted squares (up to 100+ simultaneously)
-   - Color-coded by z-distance (green, yellow, orange, red)
-   - Animated piece movement (interpolation)
-
+3
 4. **Display Output**:
    - 4K@60Hz or 1080p@144Hz
    - HDR support (DisplayPort 2.1)
@@ -332,7 +286,53 @@ Latency: 6 cycles @ 2.5 GHz = 2.4 nanoseconds
 - Backpropagation accelerator (gradient calculation)
 - Stochastic Gradient Descent (SGD) optimizer
 - Learning rate: 0.001 (adaptive)
-- Batch size: 128 positions
+- Ba. **Feature Extractors**:
+   - **Center Control**: Distance from center squares (3,3,3), (4,4,4), (3,4,4), etc.
+   - **Board Level Control**: Bonus for penetrating enemy levels
+   - **Mobility**: Count of legal moves (from MVA)
+   - **King Safety**: Exposed king penalty calculator
+   - **Pawn Structure**: Connected pawns, passed pawns, isolated pawns
+
+**Execution Pipeline**:
+```
+Clock 0: Load board state from memory
+Clock 1: Count material (parallel)
+Clock 2: Calculate piece-square bonuses (parallel)
+Clock 3: Extract positional features (parallel)
+Clock 4: Weighted sum with evaluation weights
+Clock 5: Output final score
+
+Latency: 6 cycles @ 2.5 GHz = 2.4 nanoseconds
+```
+
+---
+
+### C. 3D Graphics Rendering Pipeline
+**Purpose**: Real-time visualization of 9D chess in 3D space
+
+**GPU Core**: ARM Mali-G78 (24 cores)
+- **Shading**: 6 TFLOPS FP32
+- **Ray Tracing**: Hardware RT cores for reflections/shadows
+- **Texture Units**: 16 TMUs
+- **ROPs**: 8 Render Output Units
+
+**9D Chess Rendering Features**:
+
+1. **Layer Management**:
+   - 9 transparent chess boards stacked vertically
+   - Dynamic camera orbiting (Three.js compatible)
+   - Opacity blending for inactive levels
+
+2. **Piece Rendering**:
+   - 3D chess piece models (instanced rendering)
+   - Per-piece materials (PBR shading)
+   - Glow effects for valid moves (compute shader)
+
+3. **Move Visualization**:
+   - Highlighted squares (up to 100+ simultaneously)
+   - Color-coded by z-distance (green, yellow, orange, red)
+   - Animated piece movement (interpolation)
+tch size: 128 positions
 - Training speed: 10,000 positions/second
 
 **Training Data Management**:
@@ -452,8 +452,8 @@ cc9d_render_board_3d(board, camera_position, lighting);
 
 ---
 
-## IX. Performance Benchmarks
-
+# IX. Performance Benchmarks
+#
 ### A. AI Performance
 
 **Position Evaluation**:

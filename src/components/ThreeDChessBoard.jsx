@@ -1872,7 +1872,9 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
               <strong>🔍 Last Capture:</strong><br/>
               Captured: <strong style={{ color: moveHistory[moveHistory.length - 1].capColor === 'white' ? '#666' : '#000', fontSize: '16px' }}>{getChessPiece(moveHistory[moveHistory.length - 1].capType, moveHistory[moveHistory.length - 1].capColor)}</strong>
             </>
-          )}
+          )}          # The node_modules changes are just cache files - safe to ignore
+          # Push your current branch to GitHub
+          git push backup-origin phase-1.1-pawn-movement
         </div>
         <div style={{ marginBottom: 0, fontSize: '12px', height: 100, minHeight: 100, maxHeight: 100, overflow: 'auto', backgroundColor: '#fff', padding: 4, border: '1px solid #ddd', contain: 'layout' }}>
           <strong>Moves:</strong>

@@ -27,6 +27,7 @@ function getInitialPieces() {
   add('queen', 3, 0, 2, 'white');
   add('king', 4, 0, 2, 'white');
   add('bishop', 5, 0, 2, 'white');
+  
   add('knight', 6, 0, 2, 'white');
   add('rook', 7, 0, 2, 'white');
   for (let x = 0; x < 8; x++) add('pawn', x, 1, 2, 'white');
