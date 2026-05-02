@@ -1,13 +1,18 @@
 import React from 'react';
 import BoardRenderer from './BoardRenderer';
+import NavBar from './components/NavBar';
 import ArchitectureVisualization from './components/ArchitectureVisualization';
 import PerformanceMetrics from './components/PerformanceMetrics';
 import RoadmapTimeline from './components/RoadmapTimeline';
+import ApplicationDomains from './components/ApplicationDomains';
+import { CognitionProvider } from './context/CognitionContext';
 import './App.css';
 
 function App() {
   return (
+    <CognitionProvider>
     <div className="App">
+      <NavBar />
       <header className="app-header">
         <div className="header-content">
           <h1 className="main-title">GEN-2</h1>
@@ -17,19 +22,35 @@ function App() {
       </header>
 
       <main className="app-main">
-        <section className="section">
+        <section id="architecture" className="section">
           <ArchitectureVisualization />
         </section>
 
-        <section className="section">
+        <section id="performance" className="section">
           <PerformanceMetrics />
         </section>
 
-        <section className="section">
+        <section id="roadmap" className="section">
           <RoadmapTimeline />
         </section>
 
+        <section id="domains" className="section">
+          <ApplicationDomains />
+        </section>
+
         <section className="section">
+          <div id="trail" style={{ padding: '60px 40px 20px', textAlign: 'center' }}>
+            <h2 style={{
+              fontSize: '2.5rem',
+              fontWeight: 700,
+              background: 'linear-gradient(135deg, #FB5607 0%, #FF006E 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              margin: '0 0 12px 0',
+            }}>Live Cognition Trail</h2>
+            <p style={{ color: '#b0b0b0', marginBottom: '30px' }}>Real-time visualization of cognitive signal propagation</p>
+          </div>
           <BoardRenderer />
         </section>
       </main>
@@ -40,6 +61,7 @@ function App() {
         <p>gen2.cognitive.ai</p>
       </footer>
     </div>
+    </CognitionProvider>
   );
 }
 

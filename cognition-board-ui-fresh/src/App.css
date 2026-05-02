@@ -35,6 +35,7 @@ body {
 .app-header {
   position: relative;
   min-height: 60vh;
+  padding-top: 104px;
   display: flex;
   align-items: center;
   justify-content: center;

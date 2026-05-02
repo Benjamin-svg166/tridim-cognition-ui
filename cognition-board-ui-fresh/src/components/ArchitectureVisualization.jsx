@@ -1,8 +1,18 @@
 import React, { useState } from 'react';
 import '../styles/ArchitectureVisualization.css';
+import { useCognition, featureToNodeType } from '../context/CognitionContext';
 
 function ArchitectureVisualization() {
   const [activeFeature, setActiveFeature] = useState(null);
+  const { setActiveNodeType } = useCognition();
+
+  const handleEnter = (id) => { setActiveFeature(id); setActiveNodeType(featureToNodeType[id] ?? null); };
+  const handleLeave = ()   => { setActiveFeature(null); setActiveNodeType(null); };
+  const handleClick = (id) => {
+    const next = activeFeature === id ? null : id;
+    setActiveFeature(next);
+    setActiveNodeType(next ? (featureToNodeType[next] ?? null) : null);
+  };
 
   const features = [
     {
@@ -55,9 +65,9 @@ function ArchitectureVisualization() {
               borderColor: feature.color,
               boxShadow: activeFeature === feature.id ? `0 0 20px ${feature.color}` : 'none'
             }}
-            onMouseEnter={() => setActiveFeature(feature.id)}
-            onMouseLeave={() => setActiveFeature(null)}
-            onClick={() => setActiveFeature(activeFeature === feature.id ? null : feature.id)}
+            onMouseEnter={() => handleEnter(feature.id)}
+            onMouseLeave={handleLeave}
+            onClick={() => handleClick(feature.id)}
           >
             <div className="feature-icon" style={{ color: feature.color }}>
               {feature.icon}
