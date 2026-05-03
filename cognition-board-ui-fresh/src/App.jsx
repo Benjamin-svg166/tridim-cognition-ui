@@ -1,11 +1,11 @@
 import React from 'react';
-import BoardRenderer from './BoardRenderer';
 import NavBar from './components/NavBar';
 import ArchitectureVisualization from './components/ArchitectureVisualization';
 import PerformanceMetrics from './components/PerformanceMetrics';
 import RoadmapTimeline from './components/RoadmapTimeline';
 import ApplicationDomains from './components/ApplicationDomains';
-import { CognitionProvider } from './context/CognitionContext';
+import CognitionShell from './components/CognitionShell';
+import { CognitionProvider } from './cognition/CognitionContext';
 import './App.css';
 
 function App() {
@@ -51,7 +51,7 @@ function App() {
             }}>Live Cognition Trail</h2>
             <p style={{ color: '#b0b0b0', marginBottom: '30px' }}>Real-time visualization of cognitive signal propagation</p>
           </div>
-          <BoardRenderer />
+          <CognitionShell />
         </section>
       </main>
 

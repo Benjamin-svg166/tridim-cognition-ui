@@ -1,12 +1,13 @@
 import React from 'react';
-import { useCognition } from '../context/CognitionContext';
-import { sampleTrail, nodeTypes } from '../trails/trailSchema';
+import { useCognition } from '../cognition/CognitionContext';
+import { nodeTypes } from '../cognition/trails';
 import '../styles/NodeInspector.css';
 
 function NodeInspector() {
-  const { inspectedNode, setInspectedNode } = useCognition();
+  const { inspectedNode, setInspectedNode, activeTrail } = useCognition();
+  const sampleTrail = activeTrail;
 
-  if (!inspectedNode) return null;
+  if (!inspectedNode || !sampleTrail) return null;
 
   const node     = sampleTrail.nodes.find((n) => n.id === inspectedNode);
   if (!node) return null;

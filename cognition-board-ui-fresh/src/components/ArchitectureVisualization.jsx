@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import '../styles/ArchitectureVisualization.css';
-import { useCognition, featureToNodeType } from '../context/CognitionContext';
+import { useCognition, featureToNodeType } from '../cognition/CognitionContext';
 
 function ArchitectureVisualization() {
   const [activeFeature, setActiveFeature] = useState(null);

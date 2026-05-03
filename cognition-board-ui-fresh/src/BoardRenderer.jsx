@@ -1,10 +1,11 @@
 import React, { useEffect, useRef } from 'react';
-import { sampleTrail, nodeTypes } from './trails/trailSchema';
-import { useCognition } from './context/CognitionContext';
-import NodeInspector from './components/NodeInspector';
+import { useCognition } from './cognition/CognitionContext';
+import { nodeTypes } from './cognition/trails';
 
 const PULSE_DURATION = 1800;
 const PULSE_STAGGER = 320;
+const noop = () => {};
+const EMPTY_TRAIL = { nodes: [], pulses: [] };
 
 const easeInOut = (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
 
@@ -14,7 +15,14 @@ const BoardRenderer = () => {
   const canvasRef    = useRef(null);
   const containerRef = useRef(null);
   const rafRef       = useRef(null);
-  const { activeNodeType, inspectedNode, setInspectedNode } = useCognition();
+  const {
+    activeTrail,
+    activeNodeType = null,
+    inspectedNode = null,
+    setInspectedNode = noop,
+  } = useCognition() ?? {};
+  const sampleTrail = activeTrail ?? EMPTY_TRAIL;
+
   const activeNodeTypeRef = useRef(activeNodeType);
   const inspectedNodeRef  = useRef(inspectedNode);
 
@@ -205,7 +213,9 @@ const BoardRenderer = () => {
       canvas.removeEventListener('click', onClick);
       canvas.removeEventListener('mousemove', onMouseMove);
     };
-  }, [setInspectedNode]);
+  }, [setInspectedNode, sampleTrail.nodes, sampleTrail.pulses]);
+
+  if (!activeTrail) return null;
 
   return (
     <div
@@ -221,7 +231,6 @@ const BoardRenderer = () => {
       }}
     >
       <canvas ref={canvasRef} style={{ display: 'block' }} />
-      <NodeInspector />
     </div>
   );
 };
