@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Text } from '@react-three/drei';
 import { isValidMove, isPathClear, canPromote, wouldBeInCheckAfterMove, isInCheck, isCheckmate, isStalemate } from './nineDChessUtils';
-import { selectBestMove } from './nineDChessAI';
+import { selectBestMove, evaluatePosition } from './nineDChessAI';
 import { selectBestMoveAdvanced } from './nineDChessAI_advanced';
 import PromotionModal from './PromotionModal';
 
@@ -471,6 +471,23 @@ const NineDChessGame3D = () => {
     const promotion = promoteTo ? `=${promoteTo[0].toUpperCase()}` : '';
     return `${pieceSymbol}${fromNotation}${captureSymbol}${toNotation}${promotion}`;
   };
+
+  // AI draw response
+  useEffect(() => {
+    if (gameMode === 'pvc' && drawOfferedBy && drawOfferedBy !== computerColor && !gameStatus) {
+      // AI needs to respond to draw offer
+      const timer = setTimeout(() => {
+        const evaluation = evaluatePosition(piecesRef.current, computerColor);
+        // Accept draw if losing by more than 3 points, decline otherwise
+        if (evaluation < -3) {
+          acceptDraw();
+        } else {
+          declineDraw();
+        }
+      }, 1500); // Give it a moment to "think"
+      return () => clearTimeout(timer);
+    }
+  }, [drawOfferedBy, gameMode, computerColor, gameStatus]);
 
   // AI move
   useEffect(() => {
