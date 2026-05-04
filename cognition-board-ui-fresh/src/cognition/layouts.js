@@ -6,6 +6,7 @@ export function layoutHierarchical(nodes, pulses) {
 
   const layerMap = new Map();
   const queue = [];
+  const visited = new Set(); // <-- FIX: Add cycle detection
 
   nodes.forEach((n) => {
     if ((incoming.get(n.id) ?? 0) === 0) {
@@ -16,13 +17,19 @@ export function layoutHierarchical(nodes, pulses) {
 
   while (queue.length) {
     const id = queue.shift();
+    if (visited.has(id)) continue; // <-- FIX: Skip if already processed
+    visited.add(id);
+    
     const layer = layerMap.get(id);
     pulses
       .filter((p) => p.from === id)
       .forEach((p) => {
-        const nextLayer = Math.max(layer + 1, layerMap.get(p.to) ?? 0);
-        layerMap.set(p.to, nextLayer);
-        queue.push(p.to);
+        const currentLayer = layerMap.get(p.to) ?? 0;
+        const nextLayer = Math.max(layer + 1, currentLayer);
+        if (nextLayer > currentLayer) { // <-- FIX: Only update if changed
+          layerMap.set(p.to, nextLayer);
+          queue.push(p.to);
+        }
       });
   }
 
@@ -106,6 +113,7 @@ export function layoutForceDirected(nodes, pulses, iterations = 250) {
     pulses.forEach((e) => {
       const pa = pos.get(e.from);
       const pb = pos.get(e.to);
+      if (!pa || !pb) return; // <-- FIX: Safety check
       const dx = pb.x - pa.x;
       const dy = pb.y - pa.y;
       pa.vx += dx * k;
