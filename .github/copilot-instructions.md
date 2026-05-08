@@ -3,6 +3,48 @@
 ## Project Overview
 **Cognition Board UI** is a React-based visualization component built with Create React App. It renders a multi-layered canvas system representing cognitive/attention mechanisms with interactive pulse animations, hover detection, and click-based trail markers.
 
+## Top 3 Critical Rules
+
+**Before implementing, verify you have:**
+
+□ **1. Use `useRef()` NOT `useState()`** for animation state to avoid re-renders
+   - Example: `const pulseRadiusRef = useRef(20)` ✓
+   - Never: `const [pulseRadius, setPulseRadius] = useState(20)` ✗
+
+□ **2. Set canvas dimensions for all layers via properties** (`canvas.width/height`), never CSS
+   - Example: `canvas.width = 600; canvas.height = 400;` ✓
+   - Never: `canvas.style.width = '600px'` ✗
+
+□ **3. Always cleanup event listeners** in `useEffect` return function
+   - Example: `return () => canvas.removeEventListener('click', handler)` ✓
+   - Never: Forget to remove listeners ✗
+
+## Quick Reference Table
+
+**Implementation Order:** Follow Canvas Rendering → State Management → Event Listeners → Styling
+
+| Category | Rule | Details |
+|----------|------|---------|
+| **Canvas Rendering** | Get context | `const ctx = canvas.getContext('2d')` |
+| | Set dimensions | `canvas.width = 600; canvas.height = 400;` (required before rendering) |
+| | Clear before redraw | `ctx.clearRect(0, 0, width, height)` |
+| | Animation loop | Use `requestAnimationFrame()` for 60fps |
+| **State Management** | Animation state | Use `useRef()` NOT `useState()` to avoid re-renders |
+| **Event Listeners** | Attach in useEffect | Always attach listeners to canvas refs in `useEffect` |
+| | Cleanup required | Return cleanup function to prevent memory leaks |
+| | Coordinate calc | `e.clientX - rect.left` (canvas.getBoundingClientRect()) |
+| | Error handling | For click and hover events, validate that coordinates are within the bounds: 0-600px width and 0-400px height |
+| **Styling** | Container position | `position: 'relative'` for absolute-positioned children |
+| | Canvas stacking | All at `top: 0, left: 0` with explicit z-index |
+
+## Step-by-Step Implementation Guide
+
+1. **Canvas Setup**: Set dimensions via properties (`canvas.width = 600; canvas.height = 400`)
+2. **State Initialization**: Create refs with `useRef()` for animation values
+3. **Event Listeners**: Attach in `useEffect`, return cleanup function
+4. **Animation Loop**: Use `requestAnimationFrame()` to continuously redraw
+5. **Styling**: Apply z-index stacking to layer canvases correctly
+
 ## Architecture
 
 ### Core Component: BoardRenderer
@@ -19,8 +61,8 @@ Uses React `useRef` for performance-critical animation state:
 
 ### Key Implementation Details
 - **Animation loop**: `requestAnimationFrame()` continuously redraws top canvas
-- **Hover detection**: `mousemove` listener calculates if coordinates fall within 120-240px bounds
-- **Click handler**: Records click positions as cognition trail markers on top canvas
+- **Hover detection**: `mousemove` listener calculates if coordinates fall within 120-240px bounds relative to the canvas top-left corner (this is the Attention Zone area on the middle layer)
+- **Click handler**: Records click positions as cognition trail markers on top canvas. Markers persist until page refresh and are rendered as visual points on each animation frame. Clicks outside canvas bounds should be ignored.
 - **Canvas dimensions**: Fixed at 600x400px with 2px solid border (#00796b)
 
 ## Development Workflow
@@ -38,29 +80,6 @@ npm run eject  # ⚠️ One-way operation - full webpack control
 - `src/components/`: Expected component directory (import pattern suggests this should exist)
 - `src/canvas/`: Legacy/alternative canvas implementations (may be deprecated)
 - Test files: `*.test.js` suffix with Jest/React Testing Library
-
-## Critical Patterns & Conventions
-
-### Canvas Rendering
-1. Get context with `const ctx = canvas.getContext('2d')`
-2. Set dimensions: `canvas.width = 600; canvas.height = 400;` (required before rendering)
-3. Clear before re-rendering: `ctx.clearRect(0, 0, width, height)`
-4. Animation loop must use `requestAnimationFrame()` for smooth 60fps rendering
-
-### Refs for Performance
-- **DON'T** use `useState()` for animation state that updates every frame - causes re-renders
-- **DO** use `useRef()` for animation counters, positions, and flags that don't trigger renders
-- Example: `const pulseRadiusRef = useRef(20)` for smooth animation without React overhead
-
-### Event Listeners on Canvas
-- Always attach listeners to canvas refs in `useEffect`
-- **IMPORTANT**: Cleanup listeners in return function to prevent memory leaks
-- Calculate relative coordinates: `e.clientX - rect.left` (canvas.getBoundingClientRect())
-
-### Styling
-- Container uses `position: 'relative'` for absolute-positioned child canvases
-- All canvases positioned at `top: 0, left: 0` with stacking z-index
-- Colors use hex (#) or rgba for transparency support
 
 ## Dependencies
 - **React 19.2.0**: Latest version with new JSX transform
