@@ -192,8 +192,11 @@ function CoordinateLabels3D() {
 const NineDChessGame3D = () => {
   const piecesRef = useRef(new Map());
   const [version, setVersion] = useState(0);
+  const selectedSquareRef = useRef(null);
+  const highlightedMovesRef = useRef([]);
   const [selectedSquare, setSelectedSquare] = useState(null);
   const [highlightedMoves, setHighlightedMoves] = useState([]);
+  const toMoveRef = useRef('white');
   const [toMove, setToMove] = useState('white');
   const [moveHistory, setMoveHistory] = useState([]);
   const moveHistoryRef = useRef([]);
@@ -328,19 +331,26 @@ const NineDChessGame3D = () => {
   const handleSquareClick = useCallback((x, y, z) => {
     const clickedKey = `${x},${y},${z}`;
     const clickedPiece = piecesRef.current.get(clickedKey);
+    const currentSelectedSquare = selectedSquareRef.current;
+    const currentHighlightedMoves = highlightedMovesRef.current;
+    const currentToMove = toMoveRef.current;
 
-    if (selectedSquare) {
-      const [sx, sy, sz] = selectedSquare.split(',').map(Number);
-      const selectedPiece = piecesRef.current.get(selectedSquare);
+    if (currentSelectedSquare) {
+      const [sx, sy, sz] = currentSelectedSquare.split(',').map(Number);
+      const selectedPiece = piecesRef.current.get(currentSelectedSquare);
 
       // Try to move
-      if (highlightedMoves.some(m => m.x === x && m.y === y && m.z === z)) {
+      const isValidDestination = currentHighlightedMoves.some(m => m.x === x && m.y === y && m.z === z);
+
+      if (isValidDestination) {
         const from = { x: sx, y: sy, z: sz };
         const to = { x, y, z };
 
         // Check for pawn promotion
         if (selectedPiece.type === 'pawn' && canPromote(to, selectedPiece.color)) {
           setPromotionPending({ from, to, piece: selectedPiece });
+          selectedSquareRef.current = null;
+          highlightedMovesRef.current = [];
           setSelectedSquare(null);
           setHighlightedMoves([]);
           return;
@@ -348,23 +358,26 @@ const NineDChessGame3D = () => {
 
         // Execute move
         executeMove(from, to);
-      } else if (clickedPiece && clickedPiece.color === toMove) {
+      } else if (clickedPiece && clickedPiece.color === currentToMove) {
         // Select different piece
         selectPiece(x, y, z, clickedPiece);
       } else {
         // Deselect
+        selectedSquareRef.current = null;
+        highlightedMovesRef.current = [];
         setSelectedSquare(null);
         setHighlightedMoves([]);
       }
-    } else if (clickedPiece && clickedPiece.color === toMove) {
+    } else if (clickedPiece && clickedPiece.color === currentToMove) {
       // Select piece
       selectPiece(x, y, z, clickedPiece);
     }
-  }, [selectedSquare, highlightedMoves, toMove]);
+  }, []);
 
   // Select a piece and calculate valid moves
   const selectPiece = (x, y, z, piece) => {
     const key = `${x},${y},${z}`;
+    selectedSquareRef.current = key;
     setSelectedSquare(key);
 
     // Calculate valid moves
@@ -389,6 +402,7 @@ const NineDChessGame3D = () => {
       }
     }
 
+    highlightedMovesRef.current = validMoves;
     setHighlightedMoves(validMoves);
   };
 
@@ -430,6 +444,8 @@ const NineDChessGame3D = () => {
     setLastMove({ from, to });
 
     // Clear selection
+    selectedSquareRef.current = null;
+    highlightedMovesRef.current = [];
     setSelectedSquare(null);
     setHighlightedMoves([]);
     setHintMove(null);
@@ -455,6 +471,7 @@ const NineDChessGame3D = () => {
     }
 
     // Switch turn
+    toMoveRef.current = nextPlayer;
     setToMove(nextPlayer);
     setVersion(v => v + 1);
     moveStartTimeRef.current = Date.now();
@@ -547,7 +564,9 @@ const NineDChessGame3D = () => {
 
     moveHistoryRef.current.pop();
     setMoveHistory([...moveHistoryRef.current]);
-    setToMove(toMove === 'white' ? 'black' : 'white');
+    const newTurn = toMove === 'white' ? 'black' : 'white';
+    toMoveRef.current = newTurn;
+    setToMove(newTurn);
     setGameStatus(null);
     calculateMaterial();
     evaluateCurrentPosition();
@@ -570,12 +589,15 @@ const NineDChessGame3D = () => {
   // New game
   const newGame = () => {
     initializePieces();
+    toMoveRef.current = 'white';
     setToMove('white');
     setMoveHistory([]);
     moveHistoryRef.current = [];
     undoStackRef.current = [];
     redoStackRef.current = [];
     setGameStatus(null);
+    selectedSquareRef.current = null;
+    highlightedMovesRef.current = [];
     setSelectedSquare(null);
     setHighlightedMoves([]);
     setLastMove(null);
@@ -604,6 +626,7 @@ const NineDChessGame3D = () => {
     if (saved) {
       const gameState = JSON.parse(saved);
       piecesRef.current = new Map(gameState.pieces);
+      toMoveRef.current = gameState.toMove;
       setToMove(gameState.toMove);
       moveHistoryRef.current = gameState.moveHistory;
       setMoveHistory([...gameState.moveHistory]);
