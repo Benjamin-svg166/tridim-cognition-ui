@@ -109,6 +109,9 @@ const ThreeDChessGame = () => {
   
   // Game state
   const piecesRef = useRef(new Map());
+  const toMoveRef = useRef('white');
+  const selectedSquareRef = useRef(null);
+  const highlightedMovesRef = useRef([]);
   const [toMove, setToMove] = useState('white');
   const [moveHistory, setMoveHistory] = useState([]);
   const [selectedSquare, setSelectedSquare] = useState(null);
@@ -156,7 +159,10 @@ const ThreeDChessGame = () => {
         }
         
         // Restore game state
-        if (data.toMove) setToMove(data.toMove);
+        if (data.toMove) {
+          toMoveRef.current = data.toMove;
+          setToMove(data.toMove);
+        }
         if (data.moveHistory) setMoveHistory(data.moveHistory);
         if (data.gameStatus) setGameStatus(data.gameStatus);
         if (data.gameMode) setGameMode(data.gameMode);
@@ -165,22 +171,6 @@ const ThreeDChessGame = () => {
         hasInitialized.current = true;
         setVersion(v => v + 1);
         console.log('Game restored from localStorage');
-        
-        // Debug: Check what piece is at f6z6 (5,5,6)
-        const pieceAtF6Z6 = piecesRef.current.get('5,5,6');
-        if (pieceAtF6Z6) {
-          console.log(`[DEBUG] Piece at f6z6 (5,5,6): ${pieceAtF6Z6.color} ${pieceAtF6Z6.type}`);
-        } else {
-          console.log('[DEBUG] No piece at f6z6 (5,5,6)');
-        }
-        
-        // Debug: Check what piece is at d5z6 (3,4,6)
-        const pieceAtD5Z6 = piecesRef.current.get('3,4,6');
-        if (pieceAtD5Z6) {
-          console.log(`[DEBUG] Piece at d5z6 (3,4,6): ${pieceAtD5Z6.color} ${pieceAtD5Z6.type}`);
-        } else {
-          console.log('[DEBUG] No piece at d5z6 (3,4,6)');
-        }
         
         return;
       }
@@ -365,6 +355,7 @@ const ThreeDChessGame = () => {
     }
     setMoveHistory(h => [...h, moveRecord]);
     const nextPlayer = toMove === 'white' ? 'black' : 'white';
+    toMoveRef.current = nextPlayer;
     setToMove(nextPlayer);
     checkGameStatus(nextPlayer);
     setVersion(v => v + 1);
@@ -382,13 +373,16 @@ const ThreeDChessGame = () => {
   const handleSquareClick = useCallback((x, y, z) => {
     const clickedKey = `${x},${y},${z}`;
     const clickedPiece = piecesRef.current.get(clickedKey);
+    const currentToMove = toMoveRef.current;
+    const currentSelectedSquare = selectedSquareRef.current;
+    const currentHighlightedMoves = highlightedMovesRef.current;
 
     // If a piece is already selected
-    if (selectedSquare) {
-      const selectedPiece = piecesRef.current.get(selectedSquare);
+    if (currentSelectedSquare) {
+      const selectedPiece = piecesRef.current.get(currentSelectedSquare);
       
       // Check if clicking on a highlighted valid move
-      const isValidMoveClick = highlightedMoves.some(m => m.x === x && m.y === y && m.z === z);
+      const isValidMoveClick = currentHighlightedMoves.some(m => m.x === x && m.y === y && m.z === z);
       
       if (isValidMoveClick) {
         // Execute the move
@@ -405,7 +399,7 @@ const ThreeDChessGame = () => {
             
             if (canCastle(piecesRef.current, from, castlingInfo, selectedPiece.color, selectedPiece.hasMoved, rookHasMoved)) {
               // Execute castling
-              piecesRef.current.delete(selectedSquare);
+              piecesRef.current.delete(currentSelectedSquare);
               piecesRef.current.delete(rookKey);
               
               const newKingKey = clickedKey;
@@ -428,9 +422,12 @@ const ThreeDChessGame = () => {
               piecesRef.current.set(newRookKey, movedRook);
               
               setMoveHistory(h => [...h, { from, to, piece: 'king', pieceColor: selectedPiece.color, castling: castlingInfo.type }]);
-              const nextPlayer = toMove === 'white' ? 'black' : 'white';
+              const nextPlayer = currentToMove === 'white' ? 'black' : 'white';
+              toMoveRef.current = nextPlayer;
               setToMove(nextPlayer);
+              selectedSquareRef.current = null;
               setSelectedSquare(null);
+              highlightedMovesRef.current = [];
               setHighlightedMoves([]);
               checkGameStatus(nextPlayer);
               setVersion(v => v + 1);
@@ -450,7 +447,7 @@ const ThreeDChessGame = () => {
         }
         
         // Move piece
-        piecesRef.current.delete(selectedSquare);
+        piecesRef.current.delete(currentSelectedSquare);
         const movedPiece = {
           ...selectedPiece,
           id: clickedKey,
@@ -461,7 +458,9 @@ const ThreeDChessGame = () => {
         // Check for pawn promotion
         if (selectedPiece.type === 'pawn' && canPromote(to, selectedPiece.color)) {
           setPromotionPending({ from, to, piece: movedPiece, capturedColor, capturedType });
+          selectedSquareRef.current = null;
           setSelectedSquare(null);
+          highlightedMovesRef.current = [];
           setHighlightedMoves([]);
           setVersion(v => v + 1);
           return;
@@ -471,24 +470,31 @@ const ThreeDChessGame = () => {
         
         // Update game state
         setMoveHistory(h => [...h, { from, to, piece: selectedPiece.type, pieceColor: selectedPiece.color, capColor: capturedColor, capType: capturedType }]);
-        const nextPlayer = toMove === 'white' ? 'black' : 'white';
+        const nextPlayer = currentToMove === 'white' ? 'black' : 'white';
+        toMoveRef.current = nextPlayer;
         setToMove(nextPlayer);
+        selectedSquareRef.current = null;
         setSelectedSquare(null);
+        highlightedMovesRef.current = [];
         setHighlightedMoves([]);
         checkGameStatus(nextPlayer);
         setVersion(v => v + 1);
         
         return;
-      } else if (clickedPiece && clickedPiece.color === toMove) {
+      } else if (clickedPiece && clickedPiece.color === currentToMove) {
         // Clicked on another piece of same color - select it instead
         const moves = getValidMoves(clickedPiece, { x, y, z });
+        selectedSquareRef.current = clickedKey;
         setSelectedSquare(clickedKey);
+        highlightedMovesRef.current = moves;
         setHighlightedMoves(moves);
         setVersion(v => v + 1);
         return;
       } else {
         // Clicked elsewhere - deselect
+        selectedSquareRef.current = null;
         setSelectedSquare(null);
+        highlightedMovesRef.current = [];
         setHighlightedMoves([]);
         setVersion(v => v + 1);
         return;
@@ -496,19 +502,25 @@ const ThreeDChessGame = () => {
     }
 
     // No piece selected - try to select one
-    if (clickedPiece && clickedPiece.color === toMove) {
+    if (clickedPiece && clickedPiece.color === currentToMove) {
       const moves = getValidMoves(clickedPiece, { x, y, z });
+      selectedSquareRef.current = clickedKey;
       setSelectedSquare(clickedKey);
+      highlightedMovesRef.current = moves;
       setHighlightedMoves(moves);
       setVersion(v => v + 1);
     }
-  }, [selectedSquare, highlightedMoves, toMove, getValidMoves, checkGameStatus]);
+  }, [getValidMoves, checkGameStatus]);
 
   // Handle piece click
   const handlePieceClick = useCallback((piece, pos) => {
+    const currentToMove = toMoveRef.current;
+    const currentSelectedSquare = selectedSquareRef.current;
+    const currentHighlightedMoves = highlightedMovesRef.current;
+    
     // If a piece is already selected, check if this is a valid capture target
-    if (selectedSquare) {
-      const isValidCapture = highlightedMoves.some(m => m.x === pos.x && m.y === pos.y && m.z === pos.z);
+    if (currentSelectedSquare) {
+      const isValidCapture = currentHighlightedMoves.some(m => m.x === pos.x && m.y === pos.y && m.z === pos.z);
       if (isValidCapture) {
         // Delegate to square click handler to execute the capture
         handleSquareClick(pos.x, pos.y, pos.z);
@@ -517,14 +529,16 @@ const ThreeDChessGame = () => {
     }
     
     // Otherwise, only select pieces belonging to current player
-    if (piece.color !== toMove) return;
+    if (piece.color !== currentToMove) return;
     
     const key = `${pos.x},${pos.y},${pos.z}`;
     const moves = getValidMoves(piece, pos);
+    selectedSquareRef.current = key;
     setSelectedSquare(key);
+    highlightedMovesRef.current = moves;
     setHighlightedMoves(moves);
     setVersion(v => v + 1);
-  }, [toMove, getValidMoves, selectedSquare, highlightedMoves, handleSquareClick]);
+  }, [getValidMoves, handleSquareClick]);
 
   // Handle pawn promotion selection
   const handlePromotion = useCallback((newType) => {
@@ -544,6 +558,7 @@ const ThreeDChessGame = () => {
     // Update move history with promotion
     setMoveHistory(h => [...h, { from, to, piece: newType, pieceColor: piece.color, capColor: capturedColor, capType: capturedType, promotion: true }]);
     const nextPlayer = toMove === 'white' ? 'black' : 'white';
+    toMoveRef.current = nextPlayer;
     setToMove(nextPlayer);
     checkGameStatus(nextPlayer);
     setPromotionPending(null);
@@ -700,8 +715,11 @@ const ThreeDChessGame = () => {
               piecesRef.current.clear();
               hasInitialized.current = false;
               setMoveHistory([]);
+              toMoveRef.current = 'white';
               setToMove('white');
+              selectedSquareRef.current = null;
               setSelectedSquare(null);
+              highlightedMovesRef.current = [];
               setHighlightedMoves([]);
               setGameStatus(null);
               setIsThinking(false);
