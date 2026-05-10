@@ -3,7 +3,7 @@ import React, { createContext, useContext, useMemo, useState } from 'react';
 import { cognitionTrails } from './trails';
 import { layoutHierarchical, layoutRadial, layoutForceDirected } from './layouts';
 
-const CognitionContext = createContext(null);
+export const CognitionContext = createContext(null);
 
 export const featureToNodeType = {
   search: 'search',

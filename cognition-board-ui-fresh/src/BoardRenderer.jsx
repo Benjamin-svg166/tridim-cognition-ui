@@ -5,9 +5,9 @@ import { nodeTypes } from './cognition/trails';
 const PULSE_DURATION = 1800;
 const PULSE_STAGGER = 320;
 const noop = () => {};
-const EMPTY_TRAIL = { nodes: [], pulses: [] };
 
-const easeInOut = (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+const easeInOut = (t) =>
+  t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
 
 const NODE_RADIUS = 16;
 
@@ -15,13 +15,19 @@ const BoardRenderer = () => {
   const canvasRef    = useRef(null);
   const containerRef = useRef(null);
   const rafRef       = useRef(null);
+
   const {
     activeTrail,
     activeNodeType = null,
     inspectedNode = null,
     setInspectedNode = noop,
   } = useCognition() ?? {};
-  const sampleTrail = activeTrail ?? EMPTY_TRAIL;
+
+  // ⭐ REQUIRED FIX — prevents black/white screen
+  if (!activeTrail) return null;
+
+  // Use the real trail (never EMPTY_TRAIL)
+  const sampleTrail = activeTrail;
 
   const activeNodeTypeRef = useRef(activeNodeType);
   const inspectedNodeRef  = useRef(inspectedNode);
@@ -30,14 +36,15 @@ const BoardRenderer = () => {
   useEffect(() => { inspectedNodeRef.current  = inspectedNode;  }, [inspectedNode]);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
+    const canvas    = canvasRef.current;
     const container = containerRef.current;
-    const ctx = canvas.getContext('2d');
+    const ctx       = canvas.getContext('2d');
 
     const resize = () => {
       canvas.width  = container.offsetWidth;
       canvas.height = container.offsetHeight;
     };
+
     resize();
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(container);
@@ -46,12 +53,14 @@ const BoardRenderer = () => {
       const rect = canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
+
       let hit = null;
       sampleTrail.nodes.forEach((node) => {
         const nx = node.x * canvas.width;
         const ny = node.y * canvas.height;
         if (Math.hypot(mx - nx, my - ny) <= NODE_RADIUS) hit = node.id;
       });
+
       setInspectedNode(hit === inspectedNodeRef.current ? null : hit);
     };
     canvas.addEventListener('click', onClick);
@@ -60,9 +69,11 @@ const BoardRenderer = () => {
       const rect = canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
+
       const over = sampleTrail.nodes.some((node) => {
         return Math.hypot(mx - node.x * canvas.width, my - node.y * canvas.height) <= NODE_RADIUS;
       });
+
       canvas.style.cursor = over ? 'pointer' : 'default';
     };
     canvas.addEventListener('mousemove', onMouseMove);
@@ -81,6 +92,7 @@ const BoardRenderer = () => {
       sampleTrail.pulses.forEach((pulse) => {
         const from = pos(sampleTrail.nodes.find((n) => n.id === pulse.from));
         const to   = pos(sampleTrail.nodes.find((n) => n.id === pulse.to));
+
         ctx.save();
         ctx.beginPath();
         ctx.moveTo(from.x, from.y);
@@ -97,14 +109,15 @@ const BoardRenderer = () => {
       const x = from.x + (to.x - from.x) * e;
       const y = from.y + (to.y - from.y) * e;
 
-      // Glowing trail behind dot
       const trailProgress = Math.max(0, progress - 0.18);
       const te = easeInOut(trailProgress);
       const tx = from.x + (to.x - from.x) * te;
       const ty = from.y + (to.y - from.y) * te;
+
       const grad = ctx.createLinearGradient(tx, ty, x, y);
       grad.addColorStop(0, 'transparent');
       grad.addColorStop(1, color + 'bb');
+
       ctx.save();
       ctx.beginPath();
       ctx.moveTo(tx, ty);
@@ -114,7 +127,6 @@ const BoardRenderer = () => {
       ctx.stroke();
       ctx.restore();
 
-      // Traveling dot
       ctx.save();
       ctx.shadowBlur = 22 * weight;
       ctx.shadowColor = color;
@@ -130,13 +142,18 @@ const BoardRenderer = () => {
       const selectedId    = inspectedNodeRef.current;
 
       sampleTrail.nodes.forEach((node) => {
-        const { x, y }  = pos(node);
-        const color      = nodeTypes[node.type]?.color ?? '#ffffff';
+        const { x, y } = pos(node);
+        const color = nodeTypes[node.type]?.color ?? '#ffffff';
+
         const isHighlighted = highlightType === node.type;
         const isSelected    = selectedId === node.id;
         const isDimmed      = !!highlightType && !isHighlighted;
-        const pulse         = isHighlighted ? 1 + 0.28 * Math.sin(timestamp * 0.006) : 1;
-        const ringR         = NODE_RADIUS * pulse;
+
+        const pulse = isHighlighted
+          ? 1 + 0.28 * Math.sin(timestamp * 0.006)
+          : 1;
+
+        const ringR = NODE_RADIUS * pulse;
 
         ctx.globalAlpha = isDimmed ? 0.22 : 1;
 
@@ -196,8 +213,10 @@ const BoardRenderer = () => {
         const fromNode = sampleTrail.nodes.find((n) => n.id === pulse.from);
         const toNode   = sampleTrail.nodes.find((n) => n.id === pulse.to);
         const color    = nodeTypes[toNode.type]?.color ?? '#ffffff';
+
         const offset   = i * PULSE_STAGGER;
         const progress = ((timestamp - startTime + offset) % PULSE_DURATION) / PULSE_DURATION;
+
         drawAnimatedPulse(pos(fromNode), pos(toNode), progress, color, pulse.weight ?? 1);
       });
 
@@ -213,9 +232,7 @@ const BoardRenderer = () => {
       canvas.removeEventListener('click', onClick);
       canvas.removeEventListener('mousemove', onMouseMove);
     };
-  }, [setInspectedNode, sampleTrail.nodes, sampleTrail.pulses]);
-
-  if (!activeTrail) return null;
+  }, [setInspectedNode, activeTrail]); // ⭐ simplified deps
 
   return (
     <div

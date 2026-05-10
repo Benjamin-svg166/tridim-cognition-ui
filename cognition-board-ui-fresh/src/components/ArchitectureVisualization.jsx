@@ -1,17 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import '../styles/ArchitectureVisualization.css';
-import { useCognition, featureToNodeType } from '../cognition/CognitionContext';
+import { CognitionContext, featureToNodeType } from '../cognition/CognitionContext';
 
 function ArchitectureVisualization() {
   const [activeFeature, setActiveFeature] = useState(null);
-  const { setActiveNodeType } = useCognition();
+  // Make context optional - component can work without it (for IntroPage)
+  const context = useContext(CognitionContext);
+  const setActiveNodeType = context?.setActiveNodeType;
 
-  const handleEnter = (id) => { setActiveFeature(id); setActiveNodeType(featureToNodeType[id] ?? null); };
-  const handleLeave = ()   => { setActiveFeature(null); setActiveNodeType(null); };
+  const handleEnter = (id) => { 
+    setActiveFeature(id); 
+    setActiveNodeType?.(featureToNodeType[id] ?? null);
+  };
+  const handleLeave = () => { 
+    setActiveFeature(null); 
+    setActiveNodeType?.(null);
+  };
   const handleClick = (id) => {
     const next = activeFeature === id ? null : id;
     setActiveFeature(next);
-    setActiveNodeType(next ? (featureToNodeType[next] ?? null) : null);
+    setActiveNodeType?.(next ? (featureToNodeType[next] ?? null) : null);
   };
 
   const features = [
