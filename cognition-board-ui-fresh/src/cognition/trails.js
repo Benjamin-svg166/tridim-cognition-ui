@@ -60,6 +60,11 @@ export const cognitionTrails = [
     ],
   },
 
-  // You can add more flows here:
-  // { id: 'search-flow', label: 'Neural Search Flow', nodes: [...], pulses: [...] },
+  {
+    id: '9d-spatial-cube',
+    label: '9D Spatial Cube',
+    type: 'hypercube', // Special type to trigger NineDCubeRenderer
+    nodes: [], // Not used for hypercube
+    pulses: [], // Not used for hypercube
+  },
 ];

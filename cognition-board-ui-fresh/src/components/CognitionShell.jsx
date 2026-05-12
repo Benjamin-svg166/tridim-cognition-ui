@@ -1,8 +1,10 @@
 // src/components/CognitionShell.jsx
 import React, { useState, useRef, useCallback } from 'react';
 import BoardRenderer from '../BoardRenderer';
+import NineDCubeRenderer from '../nineDCube/NineDCubeRenderer';
 import NodeInspector from './NodeInspector';
 import CognitionControlPanel from './CognitionControlPanel';
+import { useCognition } from '../cognition/CognitionContext';
 import '../styles/CognitionShell.css';
 
 const MIN_RIGHT_WIDTH = 260;
@@ -12,6 +14,7 @@ const CognitionShell = () => {
   const [rightWidth, setRightWidth] = useState(340);
   const containerRef = useRef(null);
   const draggingRef = useRef(false);
+  const { activeTrail } = useCognition();
 
   const onMouseDown = useCallback(() => {
     draggingRef.current = true;
@@ -43,7 +46,11 @@ const CognitionShell = () => {
       onMouseLeave={onMouseUp}
     >
       <div className="cog-shell-left" style={{ marginRight: rightWidth }}>
-        <BoardRenderer />
+        {activeTrail?.type === 'hypercube' ? (
+          <NineDCubeRenderer />
+        ) : (
+          <BoardRenderer />
+        )}
       </div>
 
       <div className="cog-shell-splitter" onMouseDown={onMouseDown} aria-hidden="true" />
