@@ -1,7 +1,8 @@
 // 9D Hypercube Renderer Component
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { NINE_D_VERTICES, NINE_D_EDGES } from './vertices.js';
 import { project9Dto2D, getAnimatedRotation } from './projection.js';
+import { getVertexColor, hammingBloomIntensity, stellarBloom, depthHeat, applyBrightness } from '../cognition/colors9D.js';
 
 const NODE_RADIUS = 3;
 const HIGHLIGHT_RADIUS = 5;
@@ -15,6 +16,8 @@ const NineDCubeRenderer = ({
   const containerRef = useRef(null);
   const rafRef = useRef(null);
   const rotationRef = useRef({ x: 0.3, y: 0.4, z: 0.1 });
+  const [colorMode, setColorMode] = useState('dimension');
+  const [coreTemp, setCoreTemp] = useState(1.0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -55,35 +58,78 @@ const NineDCubeRenderer = ({
       ctx.restore();
     };
 
-    const drawVertices = (projectedVertices) => {
+    const drawVertices = (projectedVertices, timestamp) => {
       // Sort by depth (draw far ones first)
       const sorted = projectedVertices
         .map((v, i) => ({ ...v, index: i }))
         .sort((a, b) => a.depth - b.depth);
 
-      sorted.forEach(({ x, y, index }) => {
+      sorted.forEach(({ x, y, depth, index }) => {
         const screenX = x * canvas.width;
         const screenY = y * canvas.height;
         
         const isHighlighted = highlightedVertices.includes(index);
-        const radius = isHighlighted ? HIGHLIGHT_RADIUS : NODE_RADIUS;
         const alpha = isHighlighted ? 1 : 0.7;
+
+        // Calculate color properties for this vertex
+        const vertex = NINE_D_VERTICES[index];
+        const dimension = index % 9;
+        const hammingLayer = vertex.filter(v => v !== 0).length; // Count non-zero dimensions
+        
+        // Normalize depth to [-1, 1] range (depth is typically around 3-5)
+        const minDepth = 3;
+        const maxDepth = 5;
+        const zDepth = ((depth - minDepth) / (maxDepth - minDepth)) * 2 - 1;
+        
+        const energy = Math.sin(timestamp * 0.001 + index * 0.1) * 0.5 + 0.5;
+
+        const color = getVertexColor({
+          vertex,
+          hammingLayer,
+          dimension,
+          zDepth,
+          energy,
+          mode: colorMode  // Use state-controlled mode
+        });
+
+        // Apply depth-heat modulation
+        const heat = depthHeat(zDepth);
+        const finalColor = applyBrightness(color, heat * coreTemp);
+
+        // Bloom intensity for hot core effect
+        const bloom = colorMode === 'stellar' 
+          ? stellarBloom(hammingLayer) * coreTemp
+          : hammingBloomIntensity(hammingLayer) * coreTemp;
+        const bloomRadius = isHighlighted ? HIGHLIGHT_RADIUS * bloom * 1.5 : NODE_RADIUS + bloom * 6;
+        const haloRadius = bloomRadius * 3.5;
 
         ctx.save();
         ctx.globalAlpha = alpha;
         
+        // Draw soft halo with stronger corona
+        const gradient = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, haloRadius);
+        gradient.addColorStop(0, finalColor);
+        gradient.addColorStop(0.4, finalColor);
+        gradient.addColorStop(1, 'rgba(0,0,0,0)');
+        
+        ctx.beginPath();
+        ctx.arc(screenX, screenY, haloRadius, 0, Math.PI * 2);
+        ctx.fillStyle = gradient;
+        ctx.fill();
+        
+        // Draw core vertex with bloom
         if (isHighlighted) {
-          ctx.shadowBlur = 20;
-          ctx.shadowColor = '#00D9FF';
+          ctx.shadowBlur = 20 * bloom;
+          ctx.shadowColor = finalColor;
         }
 
         ctx.beginPath();
-        ctx.arc(screenX, screenY, radius, 0, Math.PI * 2);
-        ctx.fillStyle = isHighlighted ? '#00D9FF' : 'rgba(255, 255, 255, 0.8)';
+        ctx.arc(screenX, screenY, bloomRadius, 0, Math.PI * 2);
+        ctx.fillStyle = finalColor;
         ctx.fill();
 
         if (isHighlighted) {
-          ctx.strokeStyle = '#00D9FF';
+          ctx.strokeStyle = color;
           ctx.lineWidth = 2;
           ctx.stroke();
         }
@@ -123,7 +169,7 @@ const NineDCubeRenderer = ({
       );
 
       drawEdges(projectedVertices);
-      drawVertices(projectedVertices);
+      drawVertices(projectedVertices, timestamp);
       drawTitle();
 
       rafRef.current = requestAnimationFrame(animate_frame);
@@ -135,7 +181,7 @@ const NineDCubeRenderer = ({
       cancelAnimationFrame(rafRef.current);
       resizeObserver.disconnect();
     };
-  }, [highlightedVertices, showEdges, animate]);
+  }, [highlightedVertices, showEdges, animate, colorMode, coreTemp]);
 
   return (
     <div
@@ -151,6 +197,99 @@ const NineDCubeRenderer = ({
       }}
     >
       <canvas ref={canvasRef} style={{ display: 'block' }} />
+      
+      {/* Core Temperature Control */}
+      <div style={{
+        position: 'absolute',
+        top: '12px',
+        left: '12px',
+        background: 'rgba(5, 8, 18, 0.85)',
+        backdropFilter: 'blur(10px)',
+        padding: '12px',
+        borderRadius: '8px',
+        border: '1px solid rgba(255,255,255,0.1)',
+        minWidth: '200px',
+      }}>
+        <div style={{
+          fontSize: '11px',
+          fontWeight: '600',
+          color: 'rgba(255,255,255,0.7)',
+          marginBottom: '8px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+        }}>
+          Core Temperature: {coreTemp.toFixed(1)}
+        </div>
+        <input
+          type="range"
+          min="0"
+          max="2"
+          step="0.1"
+          value={coreTemp}
+          onChange={(e) => setCoreTemp(parseFloat(e.target.value))}
+          style={{
+            width: '100%',
+            cursor: 'pointer',
+          }}
+        />
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          fontSize: '9px',
+          color: 'rgba(255,255,255,0.5)',
+          marginTop: '4px',
+        }}>
+          <span>0.0</span>
+          <span>2.0</span>
+        </div>
+      </div>
+      
+      {/* Color Mode Toggle */}
+      <div style={{
+        position: 'absolute',
+        top: '12px',
+        right: '12px',
+        display: 'flex',
+        gap: '6px',
+        background: 'rgba(5, 8, 18, 0.85)',
+        backdropFilter: 'blur(10px)',
+        padding: '8px',
+        borderRadius: '8px',
+        border: '1px solid rgba(255,255,255,0.1)',
+      }}>
+        {['dimension', 'hamming', 'stellar', 'depth', 'energy', 'hybrid'].map(mode => (
+          <button
+            key={mode}
+            onClick={() => setColorMode(mode)}
+            style={{
+              padding: '6px 12px',
+              fontSize: '11px',
+              fontWeight: '600',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              background: colorMode === mode 
+                ? 'linear-gradient(135deg, #00D9FF, #9D4EDD)' 
+                : 'rgba(255,255,255,0.05)',
+              color: colorMode === mode ? '#ffffff' : 'rgba(255,255,255,0.6)',
+              transition: 'all 0.2s ease',
+              textTransform: 'capitalize',
+            }}
+            onMouseEnter={(e) => {
+              if (colorMode !== mode) {
+                e.target.style.background = 'rgba(255,255,255,0.1)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (colorMode !== mode) {
+                e.target.style.background = 'rgba(255,255,255,0.05)';
+              }
+            }}
+          >
+            {mode}
+          </button>
+        ))}
+      </div>
     </div>
   );
 };

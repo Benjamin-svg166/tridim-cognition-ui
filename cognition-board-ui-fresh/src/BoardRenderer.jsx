@@ -1,7 +1,7 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useCognition } from './cognition/CognitionContext';
 import { nodeTypes } from './cognition/trails';
-
+import { getVertexColor, DIMENSION_COLORS } from './cognition/colors9D';
 const PULSE_DURATION = 1800;
 const PULSE_STAGGER = 320;
 const noop = () => {};
@@ -15,6 +15,7 @@ const BoardRenderer = () => {
   const canvasRef    = useRef(null);
   const containerRef = useRef(null);
   const rafRef       = useRef(null);
+  const [colorMode, setColorMode] = useState('default');
 
   const {
     activeTrail,
@@ -141,9 +142,28 @@ const BoardRenderer = () => {
       const highlightType = activeNodeTypeRef.current;
       const selectedId    = inspectedNodeRef.current;
 
-      sampleTrail.nodes.forEach((node) => {
+      sampleTrail.nodes.forEach((node, index) => {
         const { x, y } = pos(node);
-        const color = nodeTypes[node.type]?.color ?? '#ffffff';
+        
+        // Determine color based on mode
+        let color;
+        if (colorMode === 'default') {
+          color = nodeTypes[node.type]?.color ?? '#ffffff';
+        } else {
+          const dimension = index % 9;
+          const hammingLayer = Math.floor(index / 9) % 10;
+          const zDepth = (y / canvas.height) * 2 - 1;
+          const energy = Math.sin(timestamp * 0.002 + index) * 0.5 + 0.5;
+          
+          color = getVertexColor({
+            vertex: node,
+            hammingLayer,
+            dimension,
+            zDepth,
+            energy,
+            mode: colorMode
+          });
+        }
 
         const isHighlighted = highlightType === node.type;
         const isSelected    = selectedId === node.id;
@@ -248,6 +268,53 @@ const BoardRenderer = () => {
       }}
     >
       <canvas ref={canvasRef} style={{ display: 'block' }} />
+      
+      {/* Color Mode Toggle */}
+      <div style={{
+        position: 'absolute',
+        top: '12px',
+        right: '12px',
+        display: 'flex',
+        gap: '6px',
+        background: 'rgba(5, 8, 18, 0.85)',
+        backdropFilter: 'blur(10px)',
+        padding: '8px',
+        borderRadius: '8px',
+        border: '1px solid rgba(255,255,255,0.1)',
+      }}>
+        {['default', 'dimension', 'hamming', 'depth', 'energy', 'hybrid'].map(mode => (
+          <button
+            key={mode}
+            onClick={() => setColorMode(mode)}
+            style={{
+              padding: '6px 12px',
+              fontSize: '11px',
+              fontWeight: '600',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              background: colorMode === mode 
+                ? 'linear-gradient(135deg, #00D9FF, #9D4EDD)' 
+                : 'rgba(255,255,255,0.05)',
+              color: colorMode === mode ? '#ffffff' : 'rgba(255,255,255,0.6)',
+              transition: 'all 0.2s ease',
+              textTransform: 'capitalize',
+            }}
+            onMouseEnter={(e) => {
+              if (colorMode !== mode) {
+                e.target.style.background = 'rgba(255,255,255,0.1)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (colorMode !== mode) {
+                e.target.style.background = 'rgba(255,255,255,0.05)';
+              }
+            }}
+          >
+            {mode}
+          </button>
+        ))}
+      </div>
     </div>
   );
 };
