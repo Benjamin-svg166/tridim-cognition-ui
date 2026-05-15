@@ -238,6 +238,11 @@ const ThreeDChessGame = () => {
     }
   }, [toMove, moveHistory, gameStatus, gameMode, difficulty, computerColor, version]);
 
+  // Debug: Log all pieces when game state changes
+  useEffect(() => {
+    if (!hasInitialized.current) return;
+  }, [version]);
+
   // Calculate valid moves for a piece
   const getValidMoves = useCallback((piece, fromPos) => {
     const moves = [];
@@ -529,7 +534,9 @@ const ThreeDChessGame = () => {
     }
     
     // Otherwise, only select pieces belonging to current player
-    if (piece.color !== currentToMove) return;
+    if (piece.color !== currentToMove) {
+      return;
+    }
     
     const key = `${pos.x},${pos.y},${pos.z}`;
     const moves = getValidMoves(piece, pos);
