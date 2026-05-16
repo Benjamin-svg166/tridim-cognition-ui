@@ -281,7 +281,8 @@ const ThreeDChessGame = () => {
           }
           
           // Check if move is valid (either normal move or castling)
-          if (!isValidCastling && !isValidMove(piece.type, fromPos, to, piece.color, isCapture, piece.hasMoved)) {
+          const validMove = isValidMove(piece.type, fromPos, to, piece.color, isCapture, piece.hasMoved);
+          if (!isValidCastling && !validMove) {
             continue;
           }
           
@@ -519,8 +520,6 @@ const ThreeDChessGame = () => {
 
   // Handle piece click
   const handlePieceClick = useCallback((piece, pos) => {
-    console.log(`🔍 PIECE CLICK: ${piece.color} ${piece.type} at (${pos.x},${pos.y},${pos.z})`);
-    
     const currentToMove = toMoveRef.current;
     const currentSelectedSquare = selectedSquareRef.current;
     const currentHighlightedMoves = highlightedMovesRef.current;
@@ -537,13 +536,11 @@ const ThreeDChessGame = () => {
     
     // Otherwise, only select pieces belonging to current player
     if (piece.color !== currentToMove) {
-      console.log(`❌ Wrong color: ${piece.color} piece but ${currentToMove}'s turn`);
       return;
     }
     
     const key = `${pos.x},${pos.y},${pos.z}`;
     const moves = getValidMoves(piece, pos);
-    console.log(`✅ SELECTING ${piece.type}: Found ${moves.length} valid moves`);
     selectedSquareRef.current = key;
     setSelectedSquare(key);
     highlightedMovesRef.current = moves;
