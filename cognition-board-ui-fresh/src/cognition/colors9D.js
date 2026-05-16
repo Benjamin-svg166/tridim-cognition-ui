@@ -66,6 +66,26 @@ export function stellarBloom(layer) {
   return 0.3 + Math.exp(-(diff ** 2) * 12) // Gaussian peak at center
 }
 
+// 2e. Stellar pressure (increases toward center)
+export function stellarPressure(layer) {
+  const t = layer / 9
+  return 1 + Math.exp(-((t - 0.5) ** 2) * 10) * 0.8
+}
+
+// 2f. Rotational shear (equator rotates faster than poles)
+export function rotationalShear(rotationAngle, layer) {
+  return 1 + Math.sin(rotationAngle + layer) * 0.05
+}
+
+// 2g. Corona scale (dynamic halo size based on temperature and flare activity)
+export function coronaScale(coreTemperature, flareActivity = 0) {
+  // coreTemperature: 0.0–2.0
+  // flareActivity: 0.0–1.0
+  const base = 1.8 + coreTemperature * 1.2
+  const flareBoost = 1 + flareActivity * 1.5
+  return base * flareBoost
+}
+
 // 3. Depth shading (z ∈ [-1, 1])
 export function depthShade(baseColor, z) {
   const factor = 0.4 + (z + 1) * 0.3
