@@ -77,13 +77,47 @@ export function rotationalShear(rotationAngle, layer) {
   return 1 + Math.sin(rotationAngle + layer) * 0.05
 }
 
-// 2g. Corona scale (dynamic halo size based on temperature and flare activity)
-export function coronaScale(coreTemperature, flareActivity = 0) {
-  // coreTemperature: 0.0–2.0
-  // flareActivity: 0.0–1.0
-  const base = 1.8 + coreTemperature * 1.2
-  const flareBoost = 1 + flareActivity * 1.5
-  return base * flareBoost
+// 2g. Corona oscillation (breathing patterns)
+export function coronaOscillation(time) {
+  // time in seconds (safeguard against invalid values)
+  const t = isNaN(time) ? 0 : time
+  const pMode = Math.sin(t * 0.6) * 0.06   // primary breathing
+  const gMode = Math.sin(t * 1.3) * 0.03   // secondary wobble
+  const rMode = Math.sin(t * 2.7) * 0.015  // fast shimmer
+  
+  const result = 1 + pMode + gMode + rMode
+  return Math.max(0.85, Math.min(1.15, result)) // Clamp to reasonable range
+}
+
+// 2h. Flare surge (storm factor)
+export function flareSurge(flareActivity) {
+  // flareActivity: 0.0–1.0 (clamp to ensure valid)
+  const clamped = Math.max(0, Math.min(1, flareActivity || 0))
+  return 1 + clamped * 1.5
+}
+
+// 2i. Corona scale (atmospheric layering with breathing)
+export function coronaScale(coreTemperature, flareActivity = 0, layer = 4.5, time = 0) {
+  // Safeguard inputs
+  const temp = Math.max(0, Math.min(3, coreTemperature || 0))
+  const activity = Math.max(0, Math.min(1, flareActivity || 0))
+  const lyr = Math.max(0, Math.min(9, layer || 4.5))
+  const t = isNaN(time) ? 0 : time
+  
+  // Base size from temperature
+  const base = 1.6 + temp * 1.3
+  
+  // Flares inflate the corona
+  const surge = flareSurge(activity)
+  
+  // Oscillation modes (breathing)
+  const osc = coronaOscillation(t)
+  
+  // Pressure bias by layer (slightly stronger around mid-layers)
+  const pressure = 0.9 + stellarPressure(lyr) * 0.15
+  
+  const result = base * surge * osc * pressure
+  return Math.max(1, Math.min(10, result)) // Clamp to reasonable range (1-10×)
 }
 
 // 3. Depth shading (z ∈ [-1, 1])
