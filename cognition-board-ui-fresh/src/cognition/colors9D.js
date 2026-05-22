@@ -122,7 +122,8 @@ export function coronaScale(coreTemperature, flareActivity = 0, layer = 4.5, tim
 
 // 3. Depth shading (z ∈ [-1, 1])
 export function depthShade(baseColor, z) {
-  const factor = 0.4 + (z + 1) * 0.3
+  const clampedZ = Math.max(-1, Math.min(1, z || 0))
+  const factor = 0.4 + (clampedZ + 1) * 0.3
   return applyBrightness(baseColor, factor)
 }
 
@@ -130,25 +131,50 @@ export function depthShade(baseColor, z) {
 export function depthHeat(z) {
   // z is in [-1, 1]
   // map to [0.7, 1.3]
-  return 0.7 + (z + 1) * 0.3
+  const clampedZ = Math.max(-1, Math.min(1, z || 0))
+  return 0.7 + (clampedZ + 1) * 0.3
 }
 
 // 4. Energy mode (pulse intensity)
 export function energyColor(baseColor, energy) {
-  const factor = 1 + energy * 0.8
+  const clampedEnergy = Math.max(0, Math.min(1, energy || 0))
+  const factor = 1 + clampedEnergy * 0.8
   return applyBrightness(baseColor, factor)
 }
 
-// 5. Utility: brighten/darken any hex color
-export function applyBrightness(hex, factor) {
-  const c = hex.replace("#", "")
+// 5. Utility: brighten/darken any hex OR rgb color
+export function applyBrightness(color, factor) {
+  // Handle RGB format: rgb(r, g, b)
+  if (color.startsWith('rgb')) {
+    const match = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
+    if (match) {
+      const r = parseInt(match[1], 10)
+      const g = parseInt(match[2], 10)
+      const b = parseInt(match[3], 10)
+      
+      const nr = Math.min(255, Math.max(0, Math.round(r * factor)))
+      const ng = Math.min(255, Math.max(0, Math.round(g * factor)))
+      const nb = Math.min(255, Math.max(0, Math.round(b * factor)))
+      
+      return `rgb(${nr}, ${ng}, ${nb})`
+    }
+  }
+  
+  // Handle HEX format: #RRGGBB
+  const c = color.replace("#", "")
   const r = parseInt(c.substring(0, 2), 16)
   const g = parseInt(c.substring(2, 4), 16)
   const b = parseInt(c.substring(4, 6), 16)
+  
+  // Validate parsed values
+  if (isNaN(r) || isNaN(g) || isNaN(b)) {
+    console.warn('Invalid color in applyBrightness:', color)
+    return color // Return original if parsing fails
+  }
 
-  const nr = Math.min(255, Math.round(r * factor))
-  const ng = Math.min(255, Math.round(g * factor))
-  const nb = Math.min(255, Math.round(b * factor))
+  const nr = Math.min(255, Math.max(0, Math.round(r * factor)))
+  const ng = Math.min(255, Math.max(0, Math.round(g * factor)))
+  const nb = Math.min(255, Math.max(0, Math.round(b * factor)))
 
   return `rgb(${nr}, ${ng}, ${nb})`
 }

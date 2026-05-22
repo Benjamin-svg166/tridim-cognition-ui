@@ -45,10 +45,21 @@ const NineDCubeRenderer = ({
   const pulsesRef = useRef([]); // Pulse-flare system
   const supernovaEngineRef = useRef(new SupernovaEngine()); // Stellar lifecycle
   const lastTimeRef = useRef(0); // Delta time tracking
+  const coreTempRef = useRef(1.0); // Use ref to avoid useEffect restart
+  const showFlaresRef = useRef(true); // Use ref to avoid useEffect restart
   const [colorMode, setColorMode] = useState('dimension');
   const [coreTemp, setCoreTemp] = useState(1.0);
   const [showFlares, setShowFlares] = useState(true);
   const [supernovaPhase, setSupernovaPhase] = useState(SupernovaPhase.Stable);
+
+  // Sync state to refs whenever they change
+  useEffect(() => {
+    coreTempRef.current = coreTemp;
+  }, [coreTemp]);
+
+  useEffect(() => {
+    showFlaresRef.current = showFlares;
+  }, [showFlares]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -88,7 +99,7 @@ const NineDCubeRenderer = ({
         const v2 = projectedVertices[j];
 
         // Find pulse on this edge
-        const pulse = showFlares ? pulsesRef.current.find(p => p.edgeIndex === edgeIndex) : null;
+        const pulse = showFlaresRef.current ? pulsesRef.current.find(p => p.edgeIndex === edgeIndex) : null;
 
         if (pulse) {
           // Draw flare with dimension color
@@ -99,7 +110,7 @@ const NineDCubeRenderer = ({
           const arc = Math.pow(Math.sin(pulse.t * Math.PI), 1.5);
           
           // Temperature-scaled flare intensity (hotter star → hotter flares)
-          const flareHeat = 1 + coreTemp * 0.6;
+          const flareHeat = 1 + coreTempRef.current * 0.6;
           
           // Calculate intensity with arc curvature
           const baseIntensity = 1.0 + arc * (pulse.micro ? 2.5 : FLARE_INTENSITY_PEAK);
@@ -168,13 +179,15 @@ const NineDCubeRenderer = ({
       ctx.restore();
     };
 
-    const drawVertices = (projectedVertices, timestamp, flareActivity = 0, time = 0) => {
+    const drawVertices = (projectedVertices, timestamp, flareActivity = 0, time = 0, frame = 0) => {
       // Sort by depth (draw far ones first)
       const sorted = projectedVertices
         .map((v, i) => ({ ...v, index: i }))
         .sort((a, b) => a.depth - b.depth);
 
       const engine = supernovaEngineRef.current;
+      let drawnCount = 0;
+      let skippedCount = 0;
 
       sorted.forEach(({ x, y, depth, index }) => {
         const screenX = x * canvas.width;
@@ -191,7 +204,14 @@ const NineDCubeRenderer = ({
         // Normalize depth to [-1, 1] range (depth is typically around 3-5)
         const minDepth = 3;
         const maxDepth = 5;
-        const zDepth = ((depth - minDepth) / (maxDepth - minDepth)) * 2 - 1;
+        const rawZDepth = ((depth - minDepth) / (maxDepth - minDepth)) * 2 - 1;
+        const zDepth = Math.max(-1, Math.min(1, rawZDepth)); // Clamp to valid range
+        
+        if (isNaN(depth) || isNaN(zDepth)) {
+          console.warn('Invalid depth:', { index, depth, zDepth });
+          skippedCount++;
+          return;
+        }
         
         const energy = Math.sin(timestamp * 0.001 + index * 0.1) * 0.5 + 0.5;
 
@@ -203,6 +223,33 @@ const NineDCubeRenderer = ({
           energy,
           mode: colorMode  // Use state-controlled mode
         });
+        
+        // Validate base color IMMEDIATELY
+        if (!color || color.includes('NaN') || color.includes('undefined')) {
+          console.warn('Invalid base color from getVertexColor:', { 
+            index, 
+            color, 
+            hammingLayer, 
+            dimension, 
+            zDepth, 
+            energy, 
+            mode: colorMode 
+          });
+          // Use a safe fallback color
+          const fallbackColor = DIMENSION_COLORS[dimension % DIMENSION_COLORS.length];
+          skippedCount++;
+          // Continue with fallback instead of returning
+          const screenX = x * canvas.width;
+          const screenY = y * canvas.height;
+          ctx.save();
+          ctx.globalAlpha = 0.7;
+          ctx.beginPath();
+          ctx.arc(screenX, screenY, 3, 0, Math.PI * 2);
+          ctx.fillStyle = fallbackColor;
+          ctx.fill();
+          ctx.restore();
+          return;
+        }
 
         // Apply combined thermal physics (Pressure + Temperature Fusion)
         const pressure = stellarPressure(hammingLayer);  // Core compression
@@ -212,15 +259,37 @@ const NineDCubeRenderer = ({
           : hammingBloomIntensity(hammingLayer);  // Radial gradient
         const shear = rotationalShear(rotationRef.current.y, hammingLayer);  // Differential rotation
         
+        // Validate physics calculations
+        if (isNaN(pressure) || isNaN(heatZ) || isNaN(heatLayer) || isNaN(shear)) {
+          console.warn('NaN in physics:', { index, pressure, heatZ, heatLayer, shear });
+          skippedCount++;
+          return;
+        }
+        
         // Fused thermal model: pressure × depth × radial × rotation × temperature
-        const thermal = pressure * heatZ * heatLayer * shear * coreTemp;
+        const thermal = pressure * heatZ * heatLayer * shear * coreTempRef.current;
         let finalColor = applyBrightness(color, thermal);
+        
+        // Validate color string doesn't contain NaN
+        if (finalColor.includes('NaN')) {
+          console.warn('NaN in color calculation:', { 
+            index, 
+            pressure, 
+            heatZ, 
+            heatLayer, 
+            shear, 
+            thermal,
+            coreTemp: coreTempRef.current,
+            baseColor: color 
+          });
+          finalColor = color; // Use base color as fallback
+        }
 
         // Bloom intensity (pressure-amplified core)
-        const bloom = heatLayer * pressure * coreTemp;
+        const bloom = heatLayer * pressure * coreTempRef.current;
         
         // Dynamic corona scaling (atmospheric layering with breathing)
-        const corona = coronaScale(coreTemp, flareActivity, hammingLayer, time);
+        const corona = coronaScale(coreTempRef.current, flareActivity, hammingLayer, time);
         let radius = isHighlighted ? HIGHLIGHT_RADIUS * bloom * 1.5 : NODE_RADIUS + bloom * 6;
         let haloRadius = radius * corona;
 
@@ -239,6 +308,12 @@ const NineDCubeRenderer = ({
         haloRadius = radius * base.halo;
         alpha *= base.opacity;
         finalColor = applyBrightness(finalColor, base.brightness);
+        
+        // Validate color after supernova effects
+        if (finalColor.includes('NaN')) {
+          console.warn('NaN after supernova effects:', { index, brightness: base.brightness });
+          finalColor = color; // Use base color as fallback
+        }
 
         // Safeguards: prevent zero/NaN values
         radius = Math.max(0.8, Math.min(200, radius || 1));
@@ -247,6 +322,7 @@ const NineDCubeRenderer = ({
         
         if (isNaN(radius) || isNaN(haloRadius) || isNaN(alpha)) {
           console.warn('NaN detected in vertex render:', { radius, haloRadius, alpha, index });
+          skippedCount++;
           return; // Skip this vertex
         }
 
@@ -311,7 +387,13 @@ const NineDCubeRenderer = ({
         }
 
         ctx.restore();
+        drawnCount++;
       });
+      
+      // Debug log on first 3 frames
+      if (frame <= 3) {
+        console.log(`📊 Drew ${drawnCount} vertices, skipped ${skippedCount}`);
+      }
     };
 
     const drawTitle = () => {
@@ -331,10 +413,16 @@ const NineDCubeRenderer = ({
     let frameCount = 0;
 
     const animate_frame = (timestamp) => {
-      frameCount++;
-      
-      // Debug log every 60 frames
-      if (frameCount % 60 === 0) {
+      try {
+        frameCount++;
+        
+        // Debug: First 3 frames to verify progression
+        if (frameCount <= 3) {
+          console.log(`🎬 Frame ${frameCount}`, { timestamp, canvas: `${canvas.width}×${canvas.height}`, vertices: NINE_D_VERTICES.length });
+        }
+        
+        // Debug log every 60 frames
+        if (frameCount % 60 === 0) {
         console.log('🌟 9D Cube Status:', {
           frame: frameCount,
           canvasSize: `${canvas.width}×${canvas.height}`,
@@ -342,7 +430,7 @@ const NineDCubeRenderer = ({
           vertices: NINE_D_VERTICES.length,
           pulses: pulsesRef.current.length,
           phase: supernovaEngineRef.current.phase,
-          coreTemp: coreTemp.toFixed(1),
+          coreTemp: coreTempRef.current.toFixed(1),
         });
       }
       
@@ -367,18 +455,18 @@ const NineDCubeRenderer = ({
       lastTimeRef.current = now;
 
       const engine = supernovaEngineRef.current;
-      engine.update(dt, coreTemp);
+      engine.update(dt, coreTempRef.current);
       setSupernovaPhase(engine.phase);
 
       // Automatic trigger at extreme temperature
-      if (coreTemp >= 2.0 && engine.phase === SupernovaPhase.Stable) {
+      if (coreTempRef.current >= 2.0 && engine.phase === SupernovaPhase.Stable) {
         engine.trigger();
       }
 
       // Temperature-scaled flare activity (hotter star → more flares)
-      if (showFlares) {
+      if (showFlaresRef.current) {
         // Main flare system: temperature-responsive frequency
-        const flareChance = 0.001 + coreTemp * 0.002;
+        const flareChance = 0.001 + coreTempRef.current * 0.002;
         
         if (Math.random() < flareChance) {
           const edgeIndex = Math.floor(Math.random() * NINE_D_EDGES.length);
@@ -419,10 +507,15 @@ const NineDCubeRenderer = ({
       const time = timestamp * 0.001;
 
       drawEdges(projectedVertices);
-      drawVertices(projectedVertices, timestamp, flareActivity, time);
+      drawVertices(projectedVertices, timestamp, flareActivity, time, frameCount);
       drawTitle();
 
       rafRef.current = requestAnimationFrame(animate_frame);
+    } catch (error) {
+      console.error('❌ Animation frame error:', error);
+      console.error('Error stack:', error.stack);
+      // Don't schedule next frame on error
+    }
     };
 
     rafRef.current = requestAnimationFrame(animate_frame);
@@ -431,7 +524,7 @@ const NineDCubeRenderer = ({
       cancelAnimationFrame(rafRef.current);
       resizeObserver.disconnect();
     };
-  }, [highlightedVertices, showEdges, animate, colorMode, coreTemp, showFlares]);
+  }, [highlightedVertices, showEdges, animate, colorMode]);
 
   return (
     <div
@@ -543,7 +636,7 @@ const NineDCubeRenderer = ({
           </div>
           <button
             onClick={() => supernovaEngineRef.current.trigger()}
-            disabled={supernovaPhase !== SupernovaPhase.Stable}
+            disabled={supernovaPhase !== SupernovaPhase.Stable && supernovaPhase !== SupernovaPhase.Overheat}
             style={{
               width: '100%',
               padding: '8px 12px',
@@ -551,14 +644,14 @@ const NineDCubeRenderer = ({
               fontWeight: '600',
               border: 'none',
               borderRadius: '6px',
-              cursor: supernovaPhase === SupernovaPhase.Stable ? 'pointer' : 'not-allowed',
-              background: supernovaPhase === SupernovaPhase.Stable 
+              cursor: (supernovaPhase === SupernovaPhase.Stable || supernovaPhase === SupernovaPhase.Overheat) ? 'pointer' : 'not-allowed',
+              background: (supernovaPhase === SupernovaPhase.Stable || supernovaPhase === SupernovaPhase.Overheat)
                 ? 'linear-gradient(135deg, #FF3B30, #FF9500)' 
                 : 'rgba(255,255,255,0.1)',
               color: '#ffffff',
               transition: 'all 0.2s ease',
               marginBottom: '6px',
-              opacity: supernovaPhase === SupernovaPhase.Stable ? 1 : 0.5,
+              opacity: (supernovaPhase === SupernovaPhase.Stable || supernovaPhase === SupernovaPhase.Overheat) ? 1 : 0.5,
             }}
           >
             Trigger Supernova

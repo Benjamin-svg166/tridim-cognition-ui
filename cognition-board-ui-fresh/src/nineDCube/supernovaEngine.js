@@ -18,9 +18,12 @@ export class SupernovaEngine {
 
   trigger() {
     if (this.phase === SupernovaPhase.Stable) {
-      this.phase = SupernovaPhase.Overheat
-      this.tPhase = 0
-      this.instability = 0
+      this.phase = SupernovaPhase.Overheat;
+      this.tPhase = 0;
+      this.instability = 0;
+    } else if (this.phase === SupernovaPhase.Overheat) {
+      // Fast-forward: immediately trigger collapse
+      this.instability = 1.0;
     }
   }
 

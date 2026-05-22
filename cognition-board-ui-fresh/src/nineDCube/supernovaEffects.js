@@ -5,7 +5,19 @@ export function applySupernovaEffects(engine, time, base) {
   const { phase, tPhase } = engine
   let { radius, brightness, saturation, halo, opacity, flareActivity } = base
 
-  switch (phase) {
+  // CRITICAL: Validate all inputs before ANY calculations
+  radius = isNaN(radius) || radius === undefined ? 3 : radius
+  brightness = isNaN(brightness) || brightness === undefined ? 1 : brightness
+  saturation = isNaN(saturation) || saturation === undefined ? 1 : saturation
+  halo = isNaN(halo) || halo === undefined ? 1 : halo
+  opacity = isNaN(opacity) || opacity === undefined ? 1 : opacity
+  flareActivity = isNaN(flareActivity) || flareActivity === undefined ? 0 : flareActivity
+
+  // Validate engine values
+  const safePhase = isNaN(phase) ? SupernovaPhase.Stable : phase
+  const safeTPhase = isNaN(tPhase) || tPhase === undefined ? 0 : tPhase
+
+  switch (safePhase) {
     case SupernovaPhase.Overheat: {
       const k = Math.min(1, engine.instability)
       brightness *= 1 + k * 0.8
@@ -14,7 +26,7 @@ export function applySupernovaEffects(engine, time, base) {
     }
 
     case SupernovaPhase.Collapse: {
-      const c = Math.min(1, tPhase / 0.8)
+      const c = Math.min(1, safeTPhase / 0.8)
       radius *= Math.max(0.3, 1 - c * 0.7) // Never shrink below 30%
       brightness *= 1 + c * 4
       saturation *= 1 - c
@@ -23,7 +35,7 @@ export function applySupernovaEffects(engine, time, base) {
     }
 
     case SupernovaPhase.Flash: {
-      const f = Math.min(1, tPhase / 0.4)
+      const f = Math.min(1, safeTPhase / 0.4)
       brightness *= 3 + f * 2
       halo *= 2 + f * 3
       saturation *= 0.2
@@ -32,7 +44,7 @@ export function applySupernovaEffects(engine, time, base) {
     }
 
     case SupernovaPhase.Shockwave: {
-      const t = tPhase
+      const t = safeTPhase
       const shock = Math.sin(t * 8) * Math.exp(-t * 2)
       halo *= 1 + shock * 3
       brightness *= 1 + shock * 2
@@ -41,7 +53,7 @@ export function applySupernovaEffects(engine, time, base) {
     }
 
     case SupernovaPhase.Envelope: {
-      const e = Math.min(1, tPhase / 2)
+      const e = Math.min(1, safeTPhase / 2)
       opacity *= Math.exp(-e * 2)
       halo *= 1 - e * 0.7
       flareActivity *= 1 - e
@@ -61,6 +73,14 @@ export function applySupernovaEffects(engine, time, base) {
     default:
       break
   }
+
+  // CRITICAL: Final validation before returning - ensure NO NaN values escape
+  radius = isNaN(radius) ? 3 : Math.max(0.1, Math.min(200, radius))
+  brightness = isNaN(brightness) ? 1 : Math.max(0.1, Math.min(10, brightness))
+  saturation = isNaN(saturation) ? 1 : Math.max(0, Math.min(1, saturation))
+  halo = isNaN(halo) ? 1 : Math.max(0.1, Math.min(10, halo))
+  opacity = isNaN(opacity) ? 1 : Math.max(0, Math.min(1, opacity))
+  flareActivity = isNaN(flareActivity) ? 0 : Math.max(0, Math.min(1, flareActivity))
 
   return { radius, brightness, saturation, halo, opacity, flareActivity }
 }
