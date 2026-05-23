@@ -135,7 +135,7 @@ function ChessBoard3D({ z, pieces, selectedSquare, highlightedMoves, lastMove, o
       // Add square notation
       if (showNotation) {
         const file = String.fromCharCode(97 + x); // a-h
-        const rank = 8 - y; // 8-1
+        const rank = y + 1; // 1-8 (y=0 is rank 1, y=7 is rank 8)
         notationLabels.push(
           <Text
             key={`notation-${squareKey}`}
@@ -382,6 +382,7 @@ const NineDChessGame3D = () => {
 
     // Calculate valid moves
     const validMoves = [];
+    
     for (let tx = 0; tx < 8; tx++) {
       for (let ty = 0; ty < 8; ty++) {
         for (let tz = 0; tz < 9; tz++) {
