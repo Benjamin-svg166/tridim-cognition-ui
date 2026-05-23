@@ -1,7 +1,7 @@
 // 9D Hypercube Renderer Component
 import React, { useEffect, useRef, useState } from 'react';
 import { NINE_D_VERTICES, NINE_D_EDGES } from './vertices.js';
-import { project9Dto2D, getAnimatedRotation } from './projection.js';
+import { project9Dto2D, getAnimatedRotation, projectToSphere } from './projection.js';
 import { getVertexColor, hammingBloomIntensity, stellarBloom, stellarPressure, rotationalShear, depthHeat, applyBrightness, coronaScale, DIMENSION_COLORS } from '../cognition/colors9D.js';
 import { SupernovaEngine, SupernovaPhase } from './supernovaEngine.js';
 import { applySupernovaEffects, whiteDwarfColor, getPhaseLabel } from './supernovaEffects.js';
@@ -176,6 +176,164 @@ const NineDCubeRenderer = ({
         }
       });
 
+      ctx.restore();
+    };
+
+    const drawUnifiedSphere = (projectedVertices, timestamp, flareActivity = 0, time = 0, frame = 0) => {
+      const engine = supernovaEngineRef.current;
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      
+      // Calculate aggregate stellar properties from all vertices
+      let totalBrightness = 0;
+      let totalBloom = 0;
+      let colorSamples = [];
+      
+      projectedVertices.forEach(({ x, y, depth, index }) => {
+        const vertex = NINE_D_VERTICES[index];
+        const dimension = index % 9;
+        const hammingLayer = vertex.filter(v => v !== 0).length;
+        
+        const minDepth = 3;
+        const maxDepth = 5;
+        const rawZDepth = ((depth - minDepth) / (maxDepth - minDepth)) * 2 - 1;
+        const zDepth = Math.max(-1, Math.min(1, rawZDepth));
+        
+        const energy = Math.sin(timestamp * 0.001 + index * 0.1) * 0.5 + 0.5;
+        
+        const color = getVertexColor({
+          vertex,
+          hammingLayer,
+          dimension,
+          zDepth,
+          energy,
+          mode: colorMode
+        });
+        
+        if (!color || color.includes('NaN')) return;
+        
+        // Calculate physics for this vertex
+        const pressure = stellarPressure(hammingLayer);
+        const heatZ = depthHeat(zDepth);
+        const heatLayer = colorMode === 'stellar' 
+          ? stellarBloom(hammingLayer)
+          : hammingBloomIntensity(hammingLayer);
+        const shear = rotationalShear(rotationRef.current.y, hammingLayer);
+        const thermal = pressure * heatZ * heatLayer * shear * coreTempRef.current;
+        
+        totalBrightness += thermal;
+        totalBloom += heatLayer * pressure * coreTempRef.current;
+        colorSamples.push({ color, weight: thermal });
+      });
+      
+      // Average properties
+      const avgBrightness = totalBrightness / projectedVertices.length;
+      const avgBloom = totalBloom / projectedVertices.length;
+      
+      // Pick dominant color (weighted by thermal output)
+      const totalWeight = colorSamples.reduce((sum, s) => sum + s.weight, 0);
+      const dominantColor = colorSamples.length > 0 
+        ? colorSamples.sort((a, b) => b.weight - a.weight)[0].color
+        : '#ffffff';
+      
+      // Base sphere radius (scales with temperature and bloom)
+      let baseRadius = 120 + avgBloom * 80;
+      
+      // Apply atmospheric breathing
+      const corona = coronaScale(coreTempRef.current, flareActivity, 4.5, time);
+      let sphereRadius = baseRadius * corona;
+      
+      // Apply supernova effects to sphere
+      let base = {
+        radius: sphereRadius,
+        brightness: avgBrightness,
+        saturation: 1,
+        halo: corona,
+        opacity: 1,
+        flareActivity
+      };
+      
+      base = applySupernovaEffects(engine, time, base);
+      sphereRadius = base.radius;
+      const brightness = base.brightness;
+      const opacity = base.opacity;
+      const haloMultiplier = base.halo;
+      
+      // Safety clamps
+      sphereRadius = Math.max(10, Math.min(400, sphereRadius || 120));
+      
+      // White dwarf special rendering
+      if (engine.phase === SupernovaPhase.WhiteDwarf) {
+        const wdRadius = sphereRadius * 0.3;
+        const wdColor = whiteDwarfColor();
+        
+        ctx.save();
+        ctx.globalAlpha = opacity;
+        
+        // Compact halo
+        const wdHalo = wdRadius * 2.2;
+        const wdGrad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, wdHalo);
+        wdGrad.addColorStop(0.0, "rgba(230,240,255,0.9)");
+        wdGrad.addColorStop(0.5, "rgba(230,240,255,0.4)");
+        wdGrad.addColorStop(1.0, "rgba(230,240,255,0)");
+        
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, wdHalo, 0, Math.PI * 2);
+        ctx.fillStyle = wdGrad;
+        ctx.fill();
+        
+        // Dense core
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, wdRadius, 0, Math.PI * 2);
+        ctx.fillStyle = wdColor;
+        ctx.shadowBlur = 30;
+        ctx.shadowColor = wdColor;
+        ctx.fill();
+        
+        ctx.restore();
+        return;
+      }
+      
+      // Draw unified stellar sphere
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      
+      // Outer atmospheric halo (corona)
+      const coronaRadius = sphereRadius * haloMultiplier * 2.5;
+      const coronaGrad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, coronaRadius);
+      const haloColor = applyBrightness(dominantColor, brightness * 0.6);
+      
+      coronaGrad.addColorStop(0.0, haloColor);
+      coronaGrad.addColorStop(0.3, haloColor);
+      coronaGrad.addColorStop(0.7, applyBrightness(dominantColor, brightness * 0.2));
+      coronaGrad.addColorStop(1.0, 'rgba(0,0,0,0)');
+      
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, coronaRadius, 0, Math.PI * 2);
+      ctx.fillStyle = coronaGrad;
+      ctx.fill();
+      
+      // Inner photosphere (bright stellar surface)
+      const photosphereGrad = ctx.createRadialGradient(
+        centerX, centerY, 0,
+        centerX, centerY, sphereRadius
+      );
+      
+      const coreColor = applyBrightness(dominantColor, brightness * 1.8);
+      const surfaceColor = applyBrightness(dominantColor, brightness * 1.2);
+      
+      photosphereGrad.addColorStop(0.0, coreColor);
+      photosphereGrad.addColorStop(0.6, surfaceColor);
+      photosphereGrad.addColorStop(0.85, applyBrightness(dominantColor, brightness * 0.8));
+      photosphereGrad.addColorStop(1.0, applyBrightness(dominantColor, brightness * 0.4));
+      
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, sphereRadius, 0, Math.PI * 2);
+      ctx.fillStyle = photosphereGrad;
+      ctx.shadowBlur = 50 * brightness;
+      ctx.shadowColor = coreColor;
+      ctx.fill();
+      
       ctx.restore();
     };
 
@@ -491,10 +649,13 @@ const NineDCubeRenderer = ({
         .map(p => ({ ...p, t: p.t + p.speed }))
         .filter(p => p.t <= 1.0); // Remove completed pulses
 
-      // Project all vertices
-      const projectedVertices = NINE_D_VERTICES.map(vertex =>
-        project9Dto2D(vertex, {
-          rotation: rotationRef.current,
+      // Project all vertices (preserve index for lookup)
+      const projectedVertices = NINE_D_VERTICES.map((vertex, index) =>
+        ({
+          ...project9Dto2D(vertex, {
+            rotation: rotationRef.current,
+          }),
+          index
         })
       );
 
@@ -506,8 +667,17 @@ const NineDCubeRenderer = ({
       // Time in seconds for oscillation modes
       const time = timestamp * 0.001;
 
-      drawEdges(projectedVertices);
-      drawVertices(projectedVertices, timestamp, flareActivity, time, frameCount);
+      // Draw unified spherical star
+      drawUnifiedSphere(projectedVertices, timestamp, flareActivity, time, frameCount);
+      
+      // Optional: Draw edges with spherical projection (subtle, for structure)
+      if (showEdges) {
+        ctx.save();
+        ctx.globalAlpha = 0.08;
+        drawEdges(projectedVertices);
+        ctx.restore();
+      }
+      
       drawTitle();
 
       rafRef.current = requestAnimationFrame(animate_frame);

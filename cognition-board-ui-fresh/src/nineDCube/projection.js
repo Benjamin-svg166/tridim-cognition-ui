@@ -12,6 +12,25 @@ const PROJECTION_WEIGHTS = {
 };
 
 /**
+ * Normalize a 3D point to lie on a unit sphere surface
+ * Converts cube structure to spherical shell
+ * @param {Object} point3D - {x, y, z} coordinates
+ * @returns {Object} Normalized {x, y, z} on unit sphere
+ */
+export function projectToSphere(point3D) {
+  const { x, y, z } = point3D;
+  const len = Math.sqrt(x * x + y * y + z * z);
+  
+  if (len === 0) return { x: 0, y: 0, z: 0 };
+  
+  return {
+    x: x / len,
+    y: y / len,
+    z: z / len,
+  };
+}
+
+/**
  * Project a 9D vertex to 3D space
  * @param {Array<number>} vertex - 9-element array of 0s and 1s
  * @param {Object} weights - Optional custom projection weights
