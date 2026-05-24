@@ -1,10 +1,14 @@
 // 9D Hypercube Renderer Component
 import React, { useEffect, useRef, useState } from 'react';
 import { NINE_D_VERTICES, NINE_D_EDGES } from './vertices.js';
-import { project9Dto2D, getAnimatedRotation, projectToSphere } from './projection.js';
+import { project9Dto2D, getAnimatedRotation, projectToSphere, rotateOnY } from './projection.js';
 import { getVertexColor, hammingBloomIntensity, stellarBloom, stellarPressure, rotationalShear, depthHeat, applyBrightness, coronaScale, DIMENSION_COLORS } from '../cognition/colors9D.js';
 import { SupernovaEngine, SupernovaPhase } from './supernovaEngine.js';
 import { applySupernovaEffects, whiteDwarfColor, getPhaseLabel } from './supernovaEffects.js';
+import { granulationIntensity } from './granulation.js';
+import { drawMagneticArcs } from './magneticArcs.js';
+import { whiteDwarfCooling } from './coolingCurve.js';
+import { starspotPenumbra, starspotLatitudeBias, starspotLifecycle, flareFromSpots, polarSpotBias, drawStarspots } from './starspots.js';
 
 const NODE_RADIUS = 3;
 const HIGHLIGHT_RADIUS = 5;
@@ -45,6 +49,7 @@ const NineDCubeRenderer = ({
   const pulsesRef = useRef([]); // Pulse-flare system
   const supernovaEngineRef = useRef(new SupernovaEngine()); // Stellar lifecycle
   const lastTimeRef = useRef(0); // Delta time tracking
+  const tWhiteDwarfRef = useRef(0); // Time since white dwarf phase
   const coreTempRef = useRef(1.0); // Use ref to avoid useEffect restart
   const showFlaresRef = useRef(true); // Use ref to avoid useEffect restart
   const [colorMode, setColorMode] = useState('dimension');
@@ -262,20 +267,21 @@ const NineDCubeRenderer = ({
       // Safety clamps
       sphereRadius = Math.max(10, Math.min(400, sphereRadius || 120));
       
-      // White dwarf special rendering
+      // White dwarf special rendering with cooling curve
       if (engine.phase === SupernovaPhase.WhiteDwarf) {
         const wdRadius = sphereRadius * 0.3;
-        const wdColor = whiteDwarfColor();
+        const cooling = whiteDwarfCooling(tWhiteDwarfRef.current);
+        const wdColor = cooling.color;
         
         ctx.save();
-        ctx.globalAlpha = opacity;
+        ctx.globalAlpha = opacity * cooling.brightnessFactor;
         
         // Compact halo
         const wdHalo = wdRadius * 2.2;
         const wdGrad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, wdHalo);
-        wdGrad.addColorStop(0.0, "rgba(230,240,255,0.9)");
-        wdGrad.addColorStop(0.5, "rgba(230,240,255,0.4)");
-        wdGrad.addColorStop(1.0, "rgba(230,240,255,0)");
+        wdGrad.addColorStop(0.0, wdColor.replace('1)', '0.9)'));
+        wdGrad.addColorStop(0.5, wdColor.replace('1)', '0.4)'));
+        wdGrad.addColorStop(1.0, wdColor.replace('1)', '0)'));
         
         ctx.beginPath();
         ctx.arc(centerX, centerY, wdHalo, 0, Math.PI * 2);
@@ -286,7 +292,7 @@ const NineDCubeRenderer = ({
         ctx.beginPath();
         ctx.arc(centerX, centerY, wdRadius, 0, Math.PI * 2);
         ctx.fillStyle = wdColor;
-        ctx.shadowBlur = 30;
+        ctx.shadowBlur = 30 * cooling.brightnessFactor;
         ctx.shadowColor = wdColor;
         ctx.fill();
         
@@ -294,7 +300,7 @@ const NineDCubeRenderer = ({
         return;
       }
       
-      // Draw unified stellar sphere
+      // Draw unified stellar sphere with granulation
       ctx.save();
       ctx.globalAlpha = opacity;
       
@@ -313,28 +319,70 @@ const NineDCubeRenderer = ({
       ctx.fillStyle = coronaGrad;
       ctx.fill();
       
-      // Inner photosphere (bright stellar surface)
+      // Inner photosphere with cinematic starspot physics stack
       const photosphereGrad = ctx.createRadialGradient(
         centerX, centerY, 0,
         centerX, centerY, sphereRadius
       );
       
-      const coreColor = applyBrightness(dominantColor, brightness * 1.8);
-      const surfaceColor = applyBrightness(dominantColor, brightness * 1.2);
+      // --- STARSPOT SHADING STACK (DRAMATIC MODE B) ---
+      // Optional: adjust these to control drama vs visibility
+      const PENUMBRA_STRENGTH = 0.25;
+      const UMBRA_STRENGTH = 0.45;
+      const LAT_STRENGTH = 0.2;
+      const LIFE_STRENGTH = 0.25;
+      const POLAR_STRENGTH = 0.35;
+      
+      // Surface normal at center (facing viewer)
+      const nx = 0, ny = 0, nz = 1;
+      
+      // 1. Granulation (boiling convection)
+      let finalBrightness = brightness * granulationIntensity(nx, ny, nz, time);
+      
+      // 2. Penumbra + Umbra (dark core + lighter ring)
+      const { umbra, penumbra } = starspotPenumbra(nx, ny, nz, time, flareActivity);
+      finalBrightness *= 1 - (penumbra * PENUMBRA_STRENGTH + umbra * UMBRA_STRENGTH);
+      
+      // 3. Latitude clustering (magnetic belts)
+      const latBias = starspotLatitudeBias(ny);
+      finalBrightness *= 1 - latBias * LAT_STRENGTH;
+      
+      // 4. Lifecycle modulation (growth + decay)
+      const life = starspotLifecycle(time);
+      finalBrightness *= 1 - life * LIFE_STRENGTH;
+      
+      // 5. Polar spot bias (dramatic polar caps)
+      const polar = polarSpotBias(ny);
+      finalBrightness *= 1 - polar * POLAR_STRENGTH;
+      
+      // ⭐ Critical: clamp minimum brightness to prevent blackout
+      finalBrightness = Math.max(finalBrightness, 0.15);
+      
+      // Calculate spot intensity for magnetic arc interaction
+      const spotIntensity = (penumbra * PENUMBRA_STRENGTH + umbra * UMBRA_STRENGTH) + latBias * LAT_STRENGTH + polar * POLAR_STRENGTH;
+      
+      const coreColor = applyBrightness(dominantColor, finalBrightness * 1.8);
+      const surfaceColor = applyBrightness(dominantColor, finalBrightness * 1.2);
       
       photosphereGrad.addColorStop(0.0, coreColor);
       photosphereGrad.addColorStop(0.6, surfaceColor);
-      photosphereGrad.addColorStop(0.85, applyBrightness(dominantColor, brightness * 0.8));
-      photosphereGrad.addColorStop(1.0, applyBrightness(dominantColor, brightness * 0.4));
+      photosphereGrad.addColorStop(0.85, applyBrightness(dominantColor, finalBrightness * 0.8));
+      photosphereGrad.addColorStop(1.0, applyBrightness(dominantColor, finalBrightness * 0.4));
       
       ctx.beginPath();
       ctx.arc(centerX, centerY, sphereRadius, 0, Math.PI * 2);
       ctx.fillStyle = photosphereGrad;
-      ctx.shadowBlur = 50 * brightness;
+      ctx.shadowBlur = 50 * finalBrightness;
       ctx.shadowColor = coreColor;
       ctx.fill();
       
       ctx.restore();
+      
+      // Draw starspots (dark magnetic regions)
+      drawStarspots(ctx, centerX, centerY, sphereRadius, time, flareActivity);
+      
+      // Draw magnetic field arcs (brighten near starspot regions)
+      drawMagneticArcs(ctx, centerX, centerY, sphereRadius * 1.05, flareActivity, time, spotIntensity);
     };
 
     const drawVertices = (projectedVertices, timestamp, flareActivity = 0, time = 0, frame = 0) => {
@@ -616,6 +664,13 @@ const NineDCubeRenderer = ({
       engine.update(dt, coreTempRef.current);
       setSupernovaPhase(engine.phase);
 
+      // Track white dwarf cooling time
+      if (engine.phase === SupernovaPhase.WhiteDwarf) {
+        tWhiteDwarfRef.current += dt;
+      } else {
+        tWhiteDwarfRef.current = 0;
+      }
+
       // Automatic trigger at extreme temperature
       if (coreTempRef.current >= 2.0 && engine.phase === SupernovaPhase.Stable) {
         engine.trigger();
@@ -659,13 +714,18 @@ const NineDCubeRenderer = ({
         })
       );
 
+      // Time in seconds for oscillation modes
+      const time = timestamp * 0.001;
+
       // Calculate flare activity (0.0 - 1.0 based on active pulses)
       const maxPulses = 40;
       let flareActivity = Math.min(1, pulsesRef.current.length / maxPulses);
       flareActivity = Math.max(0, Math.min(1, flareActivity || 0)); // Clamp and ensure valid
       
-      // Time in seconds for oscillation modes
-      const time = timestamp * 0.001;
+      // 6. Spot-driven flare boost (magnetic reconnection)
+      const nx = 0, ny = 0, nz = 1;
+      const { umbra, penumbra } = starspotPenumbra(nx, ny, nz, time, flareActivity);
+      flareActivity = flareFromSpots(umbra, penumbra, flareActivity);
 
       // Draw unified spherical star
       drawUnifiedSphere(projectedVertices, timestamp, flareActivity, time, frameCount);

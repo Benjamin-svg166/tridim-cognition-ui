@@ -31,6 +31,22 @@ export function projectToSphere(point3D) {
 }
 
 /**
+ * Rotate a 3D point around the Y axis
+ * @param {Object} v - {x, y, z} coordinates
+ * @param {number} angle - Rotation angle in radians
+ * @returns {Object} Rotated {x, y, z} coordinates
+ */
+export function rotateOnY(v, angle) {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return {
+    x: v.x * cos + v.z * sin,
+    y: v.y,
+    z: -v.x * sin + v.z * cos,
+  };
+}
+
+/**
  * Project a 9D vertex to 3D space
  * @param {Array<number>} vertex - 9-element array of 0s and 1s
  * @param {Object} weights - Optional custom projection weights
