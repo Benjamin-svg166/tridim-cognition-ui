@@ -152,8 +152,16 @@ export function jetPrecession(time, intensity) {
  * @returns {{hx: number, hy: number}} Helix offset in X and Y
  */
 export function jetHelix(time, intensity) {
-  const radius = 0.12 + intensity * 0.06;   // realistic protostar: 0.12–0.18 range
-  const speed = 2.0 + Math.sin(time * 0.4) * 2.0; // breathing twist - accelerates and slows
+  // Field-anchored radius: magnetic tension varies
+  const tension = 0.5 + Math.sin(time * 0.7) * 0.5; // 0.0–1.0 oscillation
+  const baseRadius = 0.12 + intensity * 0.06;      // 0.12–0.18 range
+  const radius = baseRadius * tension;              // tightens and loosens
+
+  // Dual-frequency helix motion: slow breathing + fast turbulent jitter
+  const speed = 
+    2.0 
+    + Math.sin(time * 0.4) * 2.0   // slow breathing (main harmonic)
+    + Math.sin(time * 1.7) * 0.3;  // fast turbulent jitter (second harmonic)
 
   return {
     hx: Math.cos(time * speed) * radius,
@@ -184,6 +192,7 @@ export function spawnJetParticles(cx, cy, radius, intensity, coreTemperature, ti
       y: cy - radius + helix.hy * radius,
       speed: 6 + intensity * 10,   // Recommended: fast, energetic
       life: 1,
+      t: 0,                        // Track elapsed time for helix drift
       dir: -1,                     // upward
       coreTemperature,
       helixX: helix.hx * radius,   // Store initial helix offset for widening
@@ -198,6 +207,7 @@ export function spawnJetParticles(cx, cy, radius, intensity, coreTemperature, ti
       y: cy + radius - helix.hy * radius,
       speed: 6 + intensity * 10,
       life: 1,
+      t: 0,                        // Track elapsed time for helix drift
       dir: 1,                      // downward
       coreTemperature,
       helixX: -helix.hx * radius,  // Store initial helix offset for widening
@@ -218,6 +228,13 @@ export function updateJetParticles(ctx, dt) {
   for (let p of jetParticles) {
     // Motion along jet axis
     p.y += p.speed * p.dir;
+
+    // Update particle time tracker
+    p.t += dt;
+
+    // Helix-driven particle drift: follow the magnetic field flow
+    const helix = jetHelix(p.t * 0.6, 0.5); // Use particle's age, moderate intensity
+    p.x += helix.hx * 0.4;
 
     // Widening spiral: particles drift laterally outward
     const age = 1 - p.life; // 0 at birth, 1 at death
