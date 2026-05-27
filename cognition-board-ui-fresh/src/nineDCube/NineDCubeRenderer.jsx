@@ -9,6 +9,7 @@ import { granulationIntensity } from './granulation.js';
 import { drawMagneticArcs } from './magneticArcs.js';
 import { whiteDwarfCooling } from './coolingCurve.js';
 import { starspotPenumbra, starspotLatitudeBias, starspotLifecycle, flareFromSpots, polarSpotBias, drawStarspots } from './starspots.js';
+import { jetIntensity, drawPolarJets, drawJetGlow } from './jets.js';
 
 const NODE_RADIUS = 3;
 const HIGHLIGHT_RADIUS = 5;
@@ -383,6 +384,13 @@ const NineDCubeRenderer = ({
       
       // Draw magnetic field arcs (brighten near starspot regions)
       drawMagneticArcs(ctx, centerX, centerY, sphereRadius * 1.05, flareActivity, time, spotIntensity);
+      
+      // Draw polar jets (disabled during white dwarf phase)
+      if (engine.phase !== SupernovaPhase.WhiteDwarf) {
+        const jets = jetIntensity(engine.phase, flareActivity, coreTempRef.current);
+        drawJetGlow(ctx, centerX, centerY, sphereRadius, jets);
+        drawPolarJets(ctx, centerX, centerY, sphereRadius, jets, time);
+      }
     };
 
     const drawVertices = (projectedVertices, timestamp, flareActivity = 0, time = 0, frame = 0) => {
