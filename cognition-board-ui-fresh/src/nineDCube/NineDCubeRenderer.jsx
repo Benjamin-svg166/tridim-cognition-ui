@@ -9,7 +9,7 @@ import { granulationIntensity } from './granulation.js';
 import { drawMagneticArcs } from './magneticArcs.js';
 import { whiteDwarfCooling } from './coolingCurve.js';
 import { starspotPenumbra, starspotLatitudeBias, starspotLifecycle, flareFromSpots, polarSpotBias, drawStarspots } from './starspots.js';
-import { jetIntensity, drawPolarJets, drawJetGlow } from './jets.js';
+import { jetIntensity, drawPolarJets, drawJetGlow, spawnJetParticles, updateJetParticles, drawAccretionDisk, relativisticBeaming, spawnJetKnots, updateJetKnots, jetPrecession } from './jets.js';
 
 const NODE_RADIUS = 3;
 const HIGHLIGHT_RADIUS = 5;
@@ -385,11 +385,33 @@ const NineDCubeRenderer = ({
       // Draw magnetic field arcs (brighten near starspot regions)
       drawMagneticArcs(ctx, centerX, centerY, sphereRadius * 1.05, flareActivity, time, spotIntensity);
       
-      // Draw polar jets (disabled during white dwarf phase)
+      // Draw polar jets with accretion disk (disabled during white dwarf phase)
       if (engine.phase !== SupernovaPhase.WhiteDwarf) {
-        const jets = jetIntensity(engine.phase, flareActivity, coreTempRef.current);
-        drawJetGlow(ctx, centerX, centerY, sphereRadius, jets);
-        drawPolarJets(ctx, centerX, centerY, sphereRadius, jets, time);
+        let jets = jetIntensity(engine.phase, flareActivity, coreTempRef.current);
+        
+        // Draw accretion disk (protostellar engine)
+        drawAccretionDisk(ctx, centerX, centerY, sphereRadius, jets, time);
+        
+        // Disk → Jet coupling (disk strengthens jets)
+        const diskBoost = jets * 0.5;
+        jets = Math.min(1, jets + diskBoost);
+        
+        // Calculate relativistic beaming (angle-dependent brightness)
+        const prec = jetPrecession(time, jets);
+        const tiltX = prec.x;
+        const tiltY = prec.y;
+        const beamBoost = relativisticBeaming(tiltX, tiltY);
+        const beamedIntensity = Math.min(1, jets * beamBoost);
+        
+        // Draw jet glow and beams with precession + relativistic beaming
+        drawJetGlow(ctx, centerX, centerY, sphereRadius, beamedIntensity);
+        drawPolarJets(ctx, centerX, centerY, sphereRadius, beamedIntensity, time);
+        
+        // Spawn jet particles with temperature-tinted plasma
+        spawnJetParticles(centerX, centerY, sphereRadius, jets, coreTempRef.current, time);
+        
+        // Spawn shock knots (bright pulses)
+        spawnJetKnots(centerX, centerY, sphereRadius, jets, time);
       }
     };
 
@@ -737,6 +759,12 @@ const NineDCubeRenderer = ({
 
       // Draw unified spherical star
       drawUnifiedSphere(projectedVertices, timestamp, flareActivity, time, frameCount);
+      
+      // Update jet particles (must be after sphere rendering)
+      updateJetParticles(ctx, dt);
+      
+      // Update shock knots (bright pulses in jets)
+      updateJetKnots(ctx, dt);
       
       // Optional: Draw edges with spherical projection (subtle, for structure)
       if (showEdges) {
