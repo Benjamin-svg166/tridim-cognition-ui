@@ -152,8 +152,8 @@ export function jetPrecession(time, intensity) {
  * @returns {{hx: number, hy: number}} Helix offset in X and Y
  */
 export function jetHelix(time, intensity) {
-  const radius = 0.15 * intensity;   // how wide the corkscrew is
-  const speed = 2.0 + intensity * 3; // how fast it spins
+  const radius = 0.15 * intensity;   // how wide the corkscrew is (realistic protostar)
+  const speed = 2.0 + Math.sin(time * 0.4) * 2.0; // breathing twist - accelerates and slows
 
   return {
     hx: Math.cos(time * speed) * radius,
