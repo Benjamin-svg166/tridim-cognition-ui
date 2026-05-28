@@ -716,7 +716,17 @@ const NineDCubeRenderer = ({
 
       // Automatic trigger at extreme temperature
       if (coreTempRef.current >= 2.0 && engine.phase === SupernovaPhase.Stable) {
+        console.log('🔥 AUTO-TRIGGER: Temp =', coreTempRef.current, 'Phase =', engine.phase);
         engine.trigger();
+      }
+      
+      // Debug: Log actual core temp every 300 frames
+      if (frameCount % 300 === 0) {
+        console.log('🌡️ Core Temp Check:', { 
+          coreTempRef: coreTempRef.current.toFixed(2), 
+          enginePhase: engine.phase,
+          shouldTrigger: (coreTempRef.current >= 2.0 && engine.phase === SupernovaPhase.Stable)
+        });
       }
 
       // Temperature-scaled flare activity (hotter star → more flares)
