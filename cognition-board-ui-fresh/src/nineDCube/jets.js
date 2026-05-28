@@ -154,7 +154,7 @@ export function jetPrecession(time, intensity) {
 export function jetHelix(time, intensity) {
   // Field-anchored radius: magnetic tension varies
   const tension = 0.5 + Math.sin(time * 0.7) * 0.5; // 0.0–1.0 oscillation
-  const baseRadius = 0.12 + intensity * 0.06;      // 0.12–0.18 range
+  const baseRadius = 0.14 + intensity * 0.05;      // 0.14–0.19 range (sweet spot)
   const radius = baseRadius * tension;              // tightens and loosens
 
   // Dual-frequency helix motion: slow breathing + fast turbulent jitter
@@ -220,8 +220,10 @@ export function spawnJetParticles(cx, cy, radius, intensity, coreTemperature, ti
  * Update and draw jet particles
  * @param {CanvasRenderingContext2D} ctx - Canvas context
  * @param {number} dt - Delta time since last frame
+ * @param {number} time - Global animation time for helix synchronization
+ * @param {number} intensity - Current jet intensity for helix calculation
  */
-export function updateJetParticles(ctx, dt) {
+export function updateJetParticles(ctx, dt, time, intensity) {
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   
@@ -232,8 +234,8 @@ export function updateJetParticles(ctx, dt) {
     // Update particle time tracker
     p.t += dt;
 
-    // Helix-driven particle drift: follow the magnetic field flow
-    const helix = jetHelix(p.t * 0.6, 0.5); // Use particle's age, moderate intensity
+    // Helix-driven particle drift: particles ride the global helix wave
+    const helix = jetHelix(time + p.t * 0.6, intensity);
     p.x += helix.hx * 0.4;
 
     // Widening spiral: particles drift laterally outward

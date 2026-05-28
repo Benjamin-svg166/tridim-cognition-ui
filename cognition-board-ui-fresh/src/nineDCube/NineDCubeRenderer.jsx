@@ -761,7 +761,10 @@ const NineDCubeRenderer = ({
       drawUnifiedSphere(projectedVertices, timestamp, flareActivity, time, frameCount);
       
       // Update jet particles (must be after sphere rendering)
-      updateJetParticles(ctx, dt);
+      const jets = engine.phase !== SupernovaPhase.WhiteDwarf 
+        ? jetIntensity(engine.phase, flareActivity, coreTempRef.current)
+        : 0;
+      updateJetParticles(ctx, dt, time, jets);
       
       // Update shock knots (bright pulses in jets)
       updateJetKnots(ctx, dt);
