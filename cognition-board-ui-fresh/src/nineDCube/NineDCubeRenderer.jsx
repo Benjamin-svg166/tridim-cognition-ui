@@ -385,6 +385,9 @@ const NineDCubeRenderer = ({
       // Draw magnetic field arcs (brighten near starspot regions)
       drawMagneticArcs(ctx, centerX, centerY, sphereRadius * 1.05, flareActivity, time, spotIntensity);
       
+      // Return sphere data for particle occlusion calculations
+      const sphereData = { radius: sphereRadius };
+      
       // Draw polar jets with accretion disk (disabled during white dwarf phase)
       if (engine.phase !== SupernovaPhase.WhiteDwarf) {
         let jets = jetIntensity(engine.phase, flareActivity, coreTempRef.current);
@@ -413,6 +416,8 @@ const NineDCubeRenderer = ({
         // Spawn shock knots (bright pulses)
         spawnJetKnots(centerX, centerY, sphereRadius, jets, time);
       }
+      
+      return sphereData;
     };
 
     const drawVertices = (projectedVertices, timestamp, flareActivity = 0, time = 0, frame = 0) => {
@@ -758,16 +763,18 @@ const NineDCubeRenderer = ({
       flareActivity = flareFromSpots(umbra, penumbra, flareActivity);
 
       // Draw unified spherical star
-      drawUnifiedSphere(projectedVertices, timestamp, flareActivity, time, frameCount);
+      const sphereData = drawUnifiedSphere(projectedVertices, timestamp, flareActivity, time, frameCount);
       
       // Update jet particles (must be after sphere rendering)
       const jets = engine.phase !== SupernovaPhase.WhiteDwarf 
         ? jetIntensity(engine.phase, flareActivity, coreTempRef.current)
         : 0;
-      updateJetParticles(ctx, dt, time, jets);
+      const centerY = canvas.height / 2;
+      const sphereRadius = sphereData?.radius || 120;
+      updateJetParticles(ctx, dt, time, jets, centerY, sphereRadius);
       
       // Update shock knots (bright pulses in jets)
-      updateJetKnots(ctx, dt);
+      updateJetKnots(ctx, dt, centerY, sphereRadius);
       
       // Optional: Draw edges with spherical projection (subtle, for structure)
       if (showEdges) {

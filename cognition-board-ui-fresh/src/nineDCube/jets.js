@@ -8,6 +8,28 @@ const jetParticles = [];
 const jetKnots = [];
 
 /**
+ * Calculate disk shadow factor for occlusion
+ * @param {number} y - Y coordinate of particle/knot
+ * @param {number} diskYTop - Top edge of disk band
+ * @param {number} diskYBottom - Bottom edge of disk band
+ * @returns {number} Visibility factor (0.0-1.0)
+ */
+function diskShadowFactor(y, diskYTop, diskYBottom) {
+  if (y < diskYTop || y > diskYBottom) return 1; // fully visible
+
+  // inside the band → fade based on depth into disk
+  const mid = (diskYTop + diskYBottom) / 2;
+  const dist = Math.abs(y - mid);
+  const maxDist = (diskYBottom - diskYTop) / 2;
+
+  // 0 at center, 1 at edges
+  const edgeFactor = dist / maxDist;
+
+  // keep some visibility, but strongly dim in the middle
+  return 0.2 + 0.8 * edgeFactor;
+}
+
+/**
  * Calculate jet intensity based on stellar phase and activity
  * @param {string} phase - Current supernova phase
  * @param {number} flareActivity - Flare activity level (0.0-1.0)
@@ -222,8 +244,10 @@ export function spawnJetParticles(cx, cy, radius, intensity, coreTemperature, ti
  * @param {number} dt - Delta time since last frame
  * @param {number} time - Global animation time for helix synchronization
  * @param {number} intensity - Current jet intensity for helix calculation
+ * @param {number} centerY - Center Y coordinate of star for disk occlusion
+ * @param {number} sphereRadius - Radius of star for disk band calculation
  */
-export function updateJetParticles(ctx, dt, time, intensity) {
+export function updateJetParticles(ctx, dt, time, intensity, centerY, sphereRadius) {
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   
@@ -251,7 +275,14 @@ export function updateJetParticles(ctx, dt, time, intensity) {
     const g = 220;
     const b = 255 - p.coreTemperature * 40;
 
-    ctx.fillStyle = `rgba(${r},${g},${b},${p.life})`;
+    // Disk shadowing: occlude particles passing through the accretion disk
+    const diskHalfThickness = sphereRadius * 0.35;
+    const diskYTop = centerY - diskHalfThickness;
+    const diskYBottom = centerY + diskHalfThickness;
+    const shadow = diskShadowFactor(p.y, diskYTop, diskYBottom);
+    const alpha = p.life * shadow;
+
+    ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
     ctx.beginPath();
     ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
     ctx.fill();
@@ -356,9 +387,11 @@ export function spawnJetKnots(cx, cy, radius, intensity, time) {
  * Update and draw shock knots
  * @param {CanvasRenderingContext2D} ctx - Canvas context
  * @param {number} dt - Delta time since last frame
+ * @param {number} centerY - Center Y coordinate of star for disk occlusion
+ * @param {number} sphereRadius - Radius of star for disk band calculation
  * @param {Object} colorBase - Base color {r, g, b}
  */
-export function updateJetKnots(ctx, dt, colorBase = { r: 200, g: 230, b: 255 }) {
+export function updateJetKnots(ctx, dt, centerY, sphereRadius, colorBase = { r: 200, g: 230, b: 255 }) {
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   
@@ -375,7 +408,14 @@ export function updateJetKnots(ctx, dt, colorBase = { r: 200, g: 230, b: 255 }) 
     const life = Math.max(0, 1 - k.t * 0.4); // fade over time
     const radius = 4 + k.t * 3;
 
-    ctx.fillStyle = `rgba(${colorBase.r},${colorBase.g},${colorBase.b},${life})`;
+    // Disk shadowing: occlude knots passing through the accretion disk
+    const diskHalfThickness = sphereRadius * 0.35;
+    const diskYTop = centerY - diskHalfThickness;
+    const diskYBottom = centerY + diskHalfThickness;
+    const shadow = diskShadowFactor(k.y, diskYTop, diskYBottom);
+    const alpha = life * shadow;
+
+    ctx.fillStyle = `rgba(${colorBase.r},${colorBase.g},${colorBase.b},${alpha})`;
     ctx.beginPath();
     ctx.arc(k.x, k.y, radius, 0, Math.PI * 2);
     ctx.fill();
