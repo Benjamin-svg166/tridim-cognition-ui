@@ -261,6 +261,11 @@ export function updateJetParticles(ctx, dt, time, intensity, centerY, sphereRadi
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   
+  // Debug particle count periodically
+  if (Math.random() < 0.01 && jetParticles.length > 0) {
+    console.log('💨 Jet Particles:', jetParticles.length, 'intensity:', intensity.toFixed(2));
+  }
+  
   for (let p of jetParticles) {
     // Motion along jet axis
     p.y += p.speed * p.dir;

@@ -668,6 +668,9 @@ const NineDCubeRenderer = ({
         
         // Debug log every 60 frames
         if (frameCount % 60 === 0) {
+        const jets = supernovaEngineRef.current.phase !== SupernovaPhase.WhiteDwarf 
+          ? jetIntensity(supernovaEngineRef.current.phase, Math.min(1, pulsesRef.current.length / 40), coreTempRef.current)
+          : 0;
         console.log('🌟 9D Cube Status:', {
           frame: frameCount,
           canvasSize: `${canvas.width}×${canvas.height}`,
@@ -676,6 +679,7 @@ const NineDCubeRenderer = ({
           pulses: pulsesRef.current.length,
           phase: supernovaEngineRef.current.phase,
           coreTemp: coreTempRef.current.toFixed(1),
+          jetIntensity: jets.toFixed(2),
         });
       }
       
@@ -778,6 +782,11 @@ const NineDCubeRenderer = ({
       
       // Shadow strength: brighter jets → deeper disk shadows
       const shadowStrength = 0.5 + jets * 0.5;
+      
+      // Debug jets every 300 frames
+      if (frameCount % 300 === 0 && jets > 0) {
+        console.log('🚀 Jets Active:', { jets: jets.toFixed(2), phase: engine.phase, radius: sphereRadius.toFixed(0) });
+      }
       
       updateJetParticles(ctx, dt, time, jets, centerY, sphereRadius, shadowStrength);
       
