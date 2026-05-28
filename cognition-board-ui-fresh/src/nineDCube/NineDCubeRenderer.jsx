@@ -392,15 +392,15 @@ const NineDCubeRenderer = ({
       if (engine.phase !== SupernovaPhase.WhiteDwarf) {
         let jets = jetIntensity(engine.phase, flareActivity, coreTempRef.current);
         
-        // Draw accretion disk (protostellar engine)
-        drawAccretionDisk(ctx, centerX, centerY, sphereRadius, jets, time);
+        // Draw accretion disk (protostellar engine) and get warp offset
+        const diskWarp = drawAccretionDisk(ctx, centerX, centerY, sphereRadius, jets, time);
         
         // Disk → Jet coupling (disk strengthens jets)
         const diskBoost = jets * 0.5;
         jets = Math.min(1, jets + diskBoost);
         
-        // Calculate relativistic beaming (angle-dependent brightness)
-        const prec = jetPrecession(time, jets);
+        // Calculate relativistic beaming with disk-influenced precession
+        const prec = jetPrecession(time, jets, diskWarp);
         const tiltX = prec.x;
         const tiltY = prec.y;
         const beamBoost = relativisticBeaming(tiltX, tiltY);
@@ -415,6 +415,10 @@ const NineDCubeRenderer = ({
         
         // Spawn shock knots (bright pulses)
         spawnJetKnots(centerX, centerY, sphereRadius, jets, time);
+        
+        // Store jet intensity and disk warp for particle updates
+        sphereData.jets = jets;
+        sphereData.diskWarp = diskWarp;
       }
       
       return sphereData;
@@ -771,10 +775,14 @@ const NineDCubeRenderer = ({
         : 0;
       const centerY = canvas.height / 2;
       const sphereRadius = sphereData?.radius || 120;
-      updateJetParticles(ctx, dt, time, jets, centerY, sphereRadius);
+      
+      // Shadow strength: brighter jets → deeper disk shadows
+      const shadowStrength = 0.5 + jets * 0.5;
+      
+      updateJetParticles(ctx, dt, time, jets, centerY, sphereRadius, shadowStrength);
       
       // Update shock knots (bright pulses in jets)
-      updateJetKnots(ctx, dt, centerY, sphereRadius);
+      updateJetKnots(ctx, dt, centerY, sphereRadius, shadowStrength);
       
       // Optional: Draw edges with spherical projection (subtle, for structure)
       if (showEdges) {

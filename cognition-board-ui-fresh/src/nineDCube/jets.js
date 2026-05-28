@@ -12,9 +12,10 @@ const jetKnots = [];
  * @param {number} y - Y coordinate of particle/knot
  * @param {number} diskYTop - Top edge of disk band
  * @param {number} diskYBottom - Bottom edge of disk band
+ * @param {number} shadowStrength - Shadow intensity multiplier (0.5-1.0)
  * @returns {number} Visibility factor (0.0-1.0)
  */
-function diskShadowFactor(y, diskYTop, diskYBottom) {
+function diskShadowFactor(y, diskYTop, diskYBottom, shadowStrength = 1.0) {
   if (y < diskYTop || y > diskYBottom) return 1; // fully visible
 
   // inside the band → fade based on depth into disk
@@ -26,7 +27,10 @@ function diskShadowFactor(y, diskYTop, diskYBottom) {
   const edgeFactor = dist / maxDist;
 
   // keep some visibility, but strongly dim in the middle
-  return 0.2 + 0.8 * edgeFactor;
+  const baseShadow = 0.2 + 0.8 * edgeFactor;
+  
+  // Apply shadow strength: brighter jets → deeper shadows (disk thickens)
+  return baseShadow * shadowStrength + (1 - shadowStrength);
 }
 
 /**
@@ -157,13 +161,18 @@ export function drawJetGlow(ctx, cx, cy, radius, intensity) {
  * Calculate jet precession (wobble of jet axis)
  * @param {number} time - Animation time in seconds
  * @param {number} intensity - Jet intensity (0.0-1.0)
+ * @param {number} diskWarp - Disk vertical warp offset (coupling from disk wobble)
  * @returns {{x: number, y: number}} Offset in X and Y directions
  */
-export function jetPrecession(time, intensity) {
+export function jetPrecession(time, intensity, diskWarp = 0) {
   const wobble = 0.15 * intensity; // max tilt ~8.5 degrees
+  
+  // Disk influence: jets wobble because the disk is wobbling
+  const diskInfluence = diskWarp * 0.002;
+  
   return {
-    x: Math.sin(time * 0.3) * wobble,
-    y: Math.cos(time * 0.25) * wobble
+    x: Math.sin(time * 0.3) * wobble + diskInfluence,
+    y: Math.cos(time * 0.25) * wobble - diskInfluence * 0.5
   };
 }
 
@@ -246,8 +255,9 @@ export function spawnJetParticles(cx, cy, radius, intensity, coreTemperature, ti
  * @param {number} intensity - Current jet intensity for helix calculation
  * @param {number} centerY - Center Y coordinate of star for disk occlusion
  * @param {number} sphereRadius - Radius of star for disk band calculation
+ * @param {number} shadowStrength - Shadow intensity multiplier (0.5-1.0)
  */
-export function updateJetParticles(ctx, dt, time, intensity, centerY, sphereRadius) {
+export function updateJetParticles(ctx, dt, time, intensity, centerY, sphereRadius, shadowStrength = 1.0) {
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   
@@ -279,7 +289,7 @@ export function updateJetParticles(ctx, dt, time, intensity, centerY, sphereRadi
     const diskHalfThickness = sphereRadius * 0.35;
     const diskYTop = centerY - diskHalfThickness;
     const diskYBottom = centerY + diskHalfThickness;
-    const shadow = diskShadowFactor(p.y, diskYTop, diskYBottom);
+    const shadow = diskShadowFactor(p.y, diskYTop, diskYBottom, shadowStrength);
     const alpha = p.life * shadow;
 
     ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
@@ -306,20 +316,39 @@ export function updateJetParticles(ctx, dt, time, intensity, centerY, sphereRadi
  * @param {number} radius - Sphere radius
  * @param {number} intensity - Jet intensity (0.0-1.0)
  * @param {number} time - Animation time in seconds
+ * @returns {number} Disk warp offset for jet coupling
  */
 export function drawAccretionDisk(ctx, cx, cy, radius, intensity, time) {
   const inner = radius * 1.1;
   const outer = radius * (2.0 + intensity * 1.5);
   const rotation = time * 0.4;
+  
+  // Disk warping from jet torque (jets exert force on inner disk)
+  const warp = Math.sin(time * 1.2) * intensity * 3;
+  
+  // Disk brightness responds to jet intensity (inner disk heats up)
+  const diskHeat = 0.4 + intensity * 0.6; // 0.4–1.0 range
 
   ctx.save();
-  ctx.translate(cx, cy);
+  ctx.translate(cx, cy + warp); // Apply vertical wobble
   ctx.rotate(rotation);
 
   const grad = ctx.createRadialGradient(0, 0, inner, 0, 0, outer);
-  grad.addColorStop(0, `rgba(255,180,120,${0.2 * intensity})`);
-  grad.addColorStop(0.5, `rgba(255,140,80,${0.3 * intensity})`);
-  grad.addColorStop(1, "rgba(255,100,50,0)");
+  
+  // Heat-modulated colors: hotter disk when jets are strong
+  const r1 = Math.floor(255 * diskHeat);
+  const g1 = Math.floor(180 * diskHeat);
+  const b1 = Math.floor(120 * diskHeat);
+  const r2 = Math.floor(255 * diskHeat);
+  const g2 = Math.floor(140 * diskHeat);
+  const b2 = Math.floor(80 * diskHeat);
+  const r3 = Math.floor(255 * diskHeat);
+  const g3 = Math.floor(100 * diskHeat);
+  const b3 = Math.floor(50 * diskHeat);
+  
+  grad.addColorStop(0, `rgba(${r1},${g1},${b1},${0.2 * intensity})`);
+  grad.addColorStop(0.5, `rgba(${r2},${g2},${b2},${0.3 * intensity})`);
+  grad.addColorStop(1, `rgba(${r3},${g3},${b3},0)`);
 
   ctx.globalCompositeOperation = "lighter";
   ctx.fillStyle = grad;
@@ -328,6 +357,8 @@ export function drawAccretionDisk(ctx, cx, cy, radius, intensity, time) {
   ctx.fill();
 
   ctx.restore();
+  
+  return warp; // Return warp for jet coupling
 }
 
 /**
@@ -389,9 +420,10 @@ export function spawnJetKnots(cx, cy, radius, intensity, time) {
  * @param {number} dt - Delta time since last frame
  * @param {number} centerY - Center Y coordinate of star for disk occlusion
  * @param {number} sphereRadius - Radius of star for disk band calculation
+ * @param {number} shadowStrength - Shadow intensity multiplier (0.5-1.0)
  * @param {Object} colorBase - Base color {r, g, b}
  */
-export function updateJetKnots(ctx, dt, centerY, sphereRadius, colorBase = { r: 200, g: 230, b: 255 }) {
+export function updateJetKnots(ctx, dt, centerY, sphereRadius, shadowStrength = 1.0, colorBase = { r: 200, g: 230, b: 255 }) {
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   
@@ -412,7 +444,7 @@ export function updateJetKnots(ctx, dt, centerY, sphereRadius, colorBase = { r: 
     const diskHalfThickness = sphereRadius * 0.35;
     const diskYTop = centerY - diskHalfThickness;
     const diskYBottom = centerY + diskHalfThickness;
-    const shadow = diskShadowFactor(k.y, diskYTop, diskYBottom);
+    const shadow = diskShadowFactor(k.y, diskYTop, diskYBottom, shadowStrength);
     const alpha = life * shadow;
 
     ctx.fillStyle = `rgba(${colorBase.r},${colorBase.g},${colorBase.b},${alpha})`;
