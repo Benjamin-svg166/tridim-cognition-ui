@@ -517,9 +517,8 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
 
   // Check game status (check, checkmate, stalemate) after a move
   const checkGameStatus = useCallback((nextPlayer) => {
-    console.log(`🔍 Checking game status for ${nextPlayer}...`);
     if (isCheckmate(piecesRef.current, nextPlayer)) {
-      console.log(`♔ CHECKMATE detected! ${nextPlayer} is checkmated`);
+      console.log(`♔ CHECKMATE! ${nextPlayer} is checkmated`);
       setGameStatus('checkmate');
       const winner = nextPlayer === 'white' ? 'black' : 'white';
       alert(`CHECKMATE! ${winner.toUpperCase()} wins!`);
@@ -527,17 +526,16 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
       // Record game outcome for reinforcement learning
       recordGameOutcome(winner);
     } else if (isStalemate(piecesRef.current, nextPlayer)) {
-      console.log(`⚖️ STALEMATE detected!`);
+      console.log(`⚖️ STALEMATE - Game is a draw`);
       setGameStatus('stalemate');
       alert('STALEMATE! Game is a draw.');
       
       // Record game outcome for reinforcement learning
       recordGameOutcome('draw');
     } else if (isInCheck(piecesRef.current, nextPlayer)) {
-      console.log(`⚠️ CHECK detected! ${nextPlayer} king is in check`);
+      console.log(`⚠️ CHECK! ${nextPlayer} king is in check`);
       setGameStatus('check');
     } else {
-      console.log(`✓ No check, checkmate, or stalemate for ${nextPlayer}`);
       setGameStatus(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -614,7 +612,9 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
     
     try {
       const nn = await loadNeuralNetwork();
-      await nn.trainingCollector.trainModel(50, 32, (epoch, totalEpochs, logs) => {
+      // OPTION 2: Reduced epochs from 50 to 25 to prevent overfitting
+      // With dropout layers already in model (0.3, 0.3, 0.2 rates)
+      await nn.trainingCollector.trainModel(25, 32, (epoch, totalEpochs, logs) => {
         setTrainingProgress({ 
           epoch, 
           totalEpochs,
@@ -691,15 +691,15 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
   }, []);
 
   const handleGenerateSelfPlay10 = useCallback(() => {
-    handleGenerateSelfPlay(5, '2-3 minutes');
+    handleGenerateSelfPlay(5, '15-20 seconds');
   }, [handleGenerateSelfPlay]);
 
   const handleGenerateSelfPlay100 = useCallback(() => {
-    handleGenerateSelfPlay(25, '10-15 minutes');
+    handleGenerateSelfPlay(25, '1-2 minutes');
   }, [handleGenerateSelfPlay]);
 
   const handleGenerateSelfPlay1000 = useCallback(() => {
-    handleGenerateSelfPlay(1000, '10-20 hours');
+    handleGenerateSelfPlay(1000, '40-60 minutes');
   }, [handleGenerateSelfPlay]);
 
   // Anti-Queen Training
@@ -766,27 +766,9 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
 
   // Execute computer move
   const makeComputerMove = useCallback(async () => {
-    console.log('🎯 makeComputerMove called with state:', { 
-      gameMode, 
-      gameModeType: typeof gameMode,
-      gameModeIsPVC: gameMode === 'pvc',
-      toMove, 
-      computerColor, 
-      gameStatus 
-    });
-    
     if (gameMode !== 'pvc' || toMove !== computerColor || gameStatus === 'checkmate' || gameStatus === 'stalemate') {
-      console.log('⏸️ Computer move blocked:', {
-        gameMode,
-        toMove,
-        computerColor,
-        gameStatus,
-        shouldMove: gameMode === 'pvc' && toMove === computerColor && gameStatus !== 'checkmate' && gameStatus !== 'stalemate'
-      });
       return;
     }
-
-    console.log('✅ Computer is calculating move...');
 
     // INP optimization: Delay so player can see the board state before computer moves
     // Use setTimeout to avoid blocking the main thread
@@ -800,21 +782,19 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
         : selectBestMove(piecesRef.current, computerColor, difficulty);
       
       if (!bestMove) {
-        console.log('❌ Computer has no legal moves - should be checkmate or stalemate');
+        console.error('❌ Computer has no legal moves');
         return;
       }
 
-      console.log('🎲 Computer chose move:', { from: bestMove.from, to: bestMove.to, piece: bestMove.fromKey });
+      console.log(`🎲 ${computerColor} ${bestMove.fromKey.split(',')[0]} moved`, bestMove.from, '→', bestMove.to);
 
       const { from, to, fromKey, toKey } = bestMove;
       const piece = piecesRef.current.get(fromKey);
       
       if (!piece) {
-        console.error('❌ Piece not found at', fromKey, 'Available pieces:', Array.from(piecesRef.current.keys()));
+        console.error('❌ Piece not found at', fromKey);
         return;
       }
-
-      console.log('✅ Executing computer move:', { piece: piece.type, from, to });
 
       // Capture state before move
       captureState();
@@ -851,8 +831,6 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
       const nextPlayer = toMove === 'white' ? 'black' : 'white';
       setToMove(nextPlayer);
       checkGameStatus(nextPlayer);
-
-      console.log('🎉 Computer move completed. Next player:', nextPlayer, 'Game status:', gameStatus);
 
       // Trigger animation
       animationRef.current = {
@@ -1392,25 +1370,15 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
 
   // Trigger computer move when it's computer's turn
   useEffect(() => {
-    const check1 = gameMode === 'pvc';
-    const check2 = toMove === computerColor;
-    const check3 = !promotionPending;
-    const check4 = gameStatus !== 'checkmate';
-    const check5 = gameStatus !== 'stalemate';
-    const shouldMove = check1 && check2 && check3 && check4 && check5;
-    
-    console.log(`🔔 Computer move check: gameMode="${gameMode}" toMove="${toMove}" computerColor="${computerColor}" promotion=${promotionPending} status="${gameStatus}"`);
-    
-    // DEBUG: Show alert when check detected
-    if (gameMode === 'pvc' && toMove === computerColor && gameStatus === 'check') {
-      console.log('🚨 DEBUG: Computer is in CHECK and should respond!');
-    }
+    const shouldMove = gameMode === 'pvc' 
+      && toMove === computerColor 
+      && !promotionPending 
+      && gameStatus !== 'checkmate' 
+      && gameStatus !== 'stalemate';
     
     if (shouldMove) {
-      console.log('✅ ALL CONDITIONS MET - Calling makeComputerMove');
+      console.log(`🤖 Computer (${computerColor}) is calculating move...`);
       makeComputerMove();
-    } else {
-      console.log(`❌ BLOCKED - ${check1?'✓':'✗'}mode ${check2?'✓':'✗'}turn(${toMove}vs${computerColor}) ${check3?'✓':'✗'}noProm ${check4?'✓':'✗'}notMate ${check5?'✓':'✗'}notStale`);
     }
   }, [gameMode, toMove, computerColor, promotionPending, gameStatus, makeComputerMove]);
 
@@ -1687,7 +1655,10 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
               )}
               <div style={{ 
                 marginTop: 4, 
-                padding: lastRecordedOutcome ? 4 : 0, 
+                paddingTop: lastRecordedOutcome ? 4 : 0,
+                paddingRight: lastRecordedOutcome ? 4 : 0,
+                paddingBottom: lastRecordedOutcome ? 4 : 0,
+                paddingLeft: lastRecordedOutcome ? 4 : 0,
                 backgroundColor: '#d4edda', 
                 border: lastRecordedOutcome ? '1px solid #28a745' : 'none', 
                 borderRadius: 3, 
@@ -1859,7 +1830,10 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
           marginBottom: 4, 
           fontSize: '11px', 
           backgroundColor: '#fff3cd', 
-          padding: (moveHistory.length > 0 && moveHistory[moveHistory.length - 1]?.capColor) ? 4 : 0, 
+          paddingTop: (moveHistory.length > 0 && moveHistory[moveHistory.length - 1]?.capColor) ? 4 : 0,
+          paddingRight: (moveHistory.length > 0 && moveHistory[moveHistory.length - 1]?.capColor) ? 4 : 0,
+          paddingBottom: (moveHistory.length > 0 && moveHistory[moveHistory.length - 1]?.capColor) ? 4 : 0,
+          paddingLeft: (moveHistory.length > 0 && moveHistory[moveHistory.length - 1]?.capColor) ? 4 : 0,
           border: (moveHistory.length > 0 && moveHistory[moveHistory.length - 1]?.capColor) ? '1px solid #ffc107' : 'none', 
           borderRadius: 3,
           minHeight: (moveHistory.length > 0 && moveHistory[moveHistory.length - 1]?.capColor) ? 'auto' : 0,

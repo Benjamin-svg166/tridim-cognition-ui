@@ -84,7 +84,7 @@ export async function createModel() {
   // Input layer: 2306 features (192 squares * 12 piece types + 2 material counts)
   const inputSize = 192 * 12 + 2;
   
-  // Hidden layers with dropout for regularization
+  // Hidden layers with dropout for regularization (OPTION 2: Increased dropout)
   model.add(tf.layers.dense({
     inputShape: [inputSize],
     units: 512,
@@ -92,7 +92,7 @@ export async function createModel() {
     kernelInitializer: 'heNormal'
   }));
   
-  model.add(tf.layers.dropout({ rate: 0.3 }));
+  model.add(tf.layers.dropout({ rate: 0.4 })); // Increased from 0.3
   
   model.add(tf.layers.dense({
     units: 256,
@@ -100,7 +100,7 @@ export async function createModel() {
     kernelInitializer: 'heNormal'
   }));
   
-  model.add(tf.layers.dropout({ rate: 0.3 }));
+  model.add(tf.layers.dropout({ rate: 0.4 })); // Increased from 0.3
   
   model.add(tf.layers.dense({
     units: 128,
@@ -354,7 +354,7 @@ export class TrainingDataCollector {
     
     try {
       const results = await generateSelfPlayGames(games, {
-        difficulty: 'medium', // Use medium for balance of quality and speed
+        difficulty: 'easy', // Changed to 'easy' (depth 1) for 100x faster self-play
         useNN: false, // ALWAYS false for self-play - NN is too slow for bulk generation
         onProgress: (progressData) => {
           if (onProgress) {

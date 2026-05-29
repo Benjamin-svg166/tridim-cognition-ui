@@ -46,8 +46,10 @@ function App() {
       display: 'flex', 
       flexDirection: 'column', 
       gap: 10, 
-      padding: is3DMode ? 0 : 10, 
-      paddingTop: is3DMode ? 0 : 0,
+      paddingTop: 0,
+      paddingRight: is3DMode ? 0 : 10,
+      paddingBottom: is3DMode ? 0 : 10,
+      paddingLeft: is3DMode ? 0 : 10,
       maxWidth: is3DMode ? '100%' : 1400, 
       margin: '0 auto',
       width: '100%'

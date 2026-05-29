@@ -62,7 +62,7 @@ function createInitialPosition() {
 export async function playSelfPlayGame(options = {}) {
   const {
     maxMoves = 100,  // Reduced from 200 to prevent memory issues
-    difficulty = 'hard',
+    difficulty = 'easy',  // Changed to 'easy' (depth 1) for 100x faster self-play
     useNN = false,
     verbose = false,
     onProgress = null
@@ -79,17 +79,17 @@ export async function playSelfPlayGame(options = {}) {
   }
   
   while (moveCount < maxMoves) {
-    // Sample positions (every 5th move) to further reduce memory - was every 3rd
-    // Only store in first 40 moves (opening/early middlegame are most valuable)
-    if (moveCount % 5 === 0 && moveCount < 40) {
+    // Sample positions (every 4th move) for memory efficiency
+    // Store positions throughout the game up to move 50
+    if (moveCount % 4 === 0 && moveCount < 50) {
       const positionCopy = new Map();
       piecesMap.forEach((piece, key) => {
         positionCopy.set(key, { ...piece, pos: { ...piece.pos } });
       });
       positions.push(positionCopy);
       
-      // Stricter memory safety: limit to 20 positions per game
-      if (positions.length > 20) {
+      // Strict memory limit: max 15 positions per game to prevent crashes
+      if (positions.length > 15) {
         positions.shift(); // Remove oldest position
       }
     }
@@ -183,7 +183,7 @@ export async function playSelfPlayGame(options = {}) {
  */
 export async function generateSelfPlayGames(numGames = 100, options = {}) {
   const {
-    difficulty = 'hard',
+    difficulty = 'easy',  // Changed to 'easy' (depth 1) for 100x faster self-play
     useNN = false,
     onGameComplete = null,
     onProgress = null
@@ -211,9 +211,12 @@ export async function generateSelfPlayGames(numGames = 100, options = {}) {
       const currentGamesCompleted = gamesCompleted;
       const currentTotalPositions = totalPositions;
       
+      // Use easy difficulty only - medium causes browser memory crashes
+      // Easy generates varied positions without memory issues
+      
       // eslint-disable-next-line no-loop-func
       const gameResult = await playSelfPlayGame({
-        difficulty,
+        difficulty: 'easy',
         useNN,
         verbose: false,
         onProgress: (moves, positions) => {
@@ -239,8 +242,9 @@ export async function generateSelfPlayGames(numGames = 100, options = {}) {
       // Add to training data
       trainingCollector.addGame(gameResult.positions, gameResult.winner);
       
-      // Clear positions from memory after adding to training data
+      // Aggressive memory cleanup to prevent browser crashes
       gameResult.positions = null;
+      gameResult.moveHistory = null;
       
       gamesCompleted++;
       
@@ -248,13 +252,9 @@ export async function generateSelfPlayGames(numGames = 100, options = {}) {
         onGameComplete(i + 1, numGames, gameResult);
       }
       
-      // Force garbage collection hint and yield to browser
-      if (gamesCompleted % 5 === 0) {
-        // Every 5 games, pause longer to allow GC
-        await new Promise(resolve => setTimeout(resolve, 100));
-      } else {
-        await new Promise(resolve => setTimeout(resolve, 10));
-      }
+      // Aggressive memory management: yield to browser more frequently
+      // This allows garbage collection and prevents memory buildup
+      await new Promise(resolve => setTimeout(resolve, 50));
       
       // Log progress every 10 games
       if ((i + 1) % 10 === 0) {
