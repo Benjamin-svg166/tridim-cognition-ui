@@ -7,6 +7,12 @@ const jetParticles = [];
 // Shock knots (bright pulses in jets)
 const jetKnots = [];
 
+// Jet tips (bright spots racing down the jet showing propagation)
+const jetTips = [
+  { dir: -1, t: 0, speed: 1, life: 1 }, // top jet (dir -1 = upward)
+  { dir: 1, t: 0, speed: 1, life: 1 },  // bottom jet (dir 1 = downward)
+];
+
 /**
  * Calculate disk shadow factor for occlusion
  * @param {number} y - Y coordinate of particle/knot
@@ -502,5 +508,94 @@ export function updateJetKnots(ctx, dt, centerY, sphereRadius, shadowStrength = 
     }
   }
   
+  ctx.restore();
+}
+
+/**
+ * Update jet tip positions and speeds based on jet intensity and collimation
+ * @param {number} dt - Delta time since last frame
+ * @param {number} jets - Jet intensity (0.0-1.0)
+ * @param {number} pressure - Magnetic pressure for collimation (0.0-1.0)
+ */
+export function updateJetTips(dt, jets, pressure) {
+  // Speed increases with jet intensity and magnetic collimation
+  const baseSpeed = 0.4 + jets * 0.8;           // 0.4-1.2 range
+  const collimationBoost = 0.4 + pressure * 0.6; // 0.4-1.0 range
+  const speed = baseSpeed * collimationBoost;    // faster when strong + collimated
+
+  for (const tip of jetTips) {
+    tip.speed = speed;
+    tip.t += tip.speed * dt;
+
+    // Loop back when tip reaches far end
+    if (tip.t > 1.1) {
+      tip.t = 0;
+      tip.life = 1;
+    }
+
+    // Fade slightly over distance
+    tip.life = Math.max(0.6, 1 - tip.t * 0.3);
+  }
+}
+
+/**
+ * Draw jet tips with relativistic beaming effects
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {number} cx - Center X coordinate
+ * @param {number} cy - Center Y coordinate
+ * @param {number} sphereRadius - Sphere radius
+ * @param {number} jetLength - Length of jets
+ * @param {number} pressure - Magnetic pressure for size calculation
+ * @param {number} time - Animation time for helix/precession
+ * @param {number} intensity - Jet intensity for brightness
+ */
+export function drawJetTips(ctx, cx, cy, sphereRadius, jetLength, pressure, time, intensity) {
+  if (intensity < 0.1) return; // Skip if jets are weak
+
+  // Get current jet direction offsets (precession + helix)
+  const prec = jetPrecession(time, intensity);
+  const helix = jetHelix(time, intensity);
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+
+  for (const tip of jetTips) {
+    // Calculate position along jet
+    const distance = tip.t * jetLength;
+    const dir = tip.dir; // -1 for top, +1 for bottom
+
+    // Apply precession and helix to tip position
+    const precX = dir === -1 ? prec.x * sphereRadius : -prec.x * sphereRadius;
+    const precY = dir === -1 ? prec.y * sphereRadius : -prec.y * sphereRadius;
+    const helixX = dir === -1 ? helix.hx * sphereRadius : -helix.hx * sphereRadius;
+    const helixY = dir === -1 ? helix.hy * sphereRadius : -helix.hy * sphereRadius;
+
+    const x = cx + precX + helixX;
+    const y = cy + dir * (sphereRadius + distance) + precY + helixY;
+
+    // Relativistic beaming: tips pointing toward camera are brighter
+    // Approximate view direction as (0, 0, -1), use Y component for alignment
+    const viewAlign = dir === 1 ? 0.7 : 0.3; // bottom jet is brighter (pointing "toward" us)
+    const beamBoost = 1 + viewAlign * 1.5; // 1.0-2.5 range
+
+    // Tip size: larger when highly collimated
+    const radius = 6 + pressure * 4; // 6-10px range
+
+    // Brightness combines intensity, beaming, and life
+    const baseBrightness = 0.4 + intensity * 0.4;
+    const brightness = Math.min(1, baseBrightness * beamBoost * tip.life);
+
+    // Draw bright tip with gradient
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
+    grad.addColorStop(0, `rgba(255, 255, 255, ${brightness})`);
+    grad.addColorStop(0.5, `rgba(200, 230, 255, ${brightness * 0.6})`);
+    grad.addColorStop(1, `rgba(180, 220, 255, 0)`);
+
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   ctx.restore();
 }
