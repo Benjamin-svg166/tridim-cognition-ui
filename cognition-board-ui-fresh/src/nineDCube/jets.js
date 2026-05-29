@@ -34,6 +34,16 @@ function diskShadowFactor(y, diskYTop, diskYBottom, shadowStrength = 1.0) {
 }
 
 /**
+ * Calculate magnetic pressure for jet collimation
+ * @param {number} jets - Jet intensity (0.0-1.0)
+ * @param {number} coreTemperature - Core temperature (0.0-2.0)
+ * @returns {number} Magnetic pressure (0.0-1.0) - higher = tighter jets
+ */
+export function magneticPressure(jets, coreTemperature) {
+  return Math.min(1, jets * 0.6 + coreTemperature * 0.4);
+}
+
+/**
  * Calculate jet intensity based on stellar phase and activity
  * @param {string} phase - Current supernova phase
  * @param {number} flareActivity - Flare activity level (0.0-1.0)
@@ -63,10 +73,19 @@ export function jetIntensity(phase, flareActivity, coreTemperature) {
  * @param {number} radius - Sphere radius
  * @param {number} intensity - Jet intensity (0.0-1.0)
  * @param {number} time - Animation time in seconds
+ * @param {number} coreTemperature - Core temperature for magnetic pressure calculation
  */
-export function drawPolarJets(ctx, cx, cy, radius, intensity, time) {
-  const length = radius * (2 + intensity * 4);
-  const width = radius * (0.1 + intensity * 0.2);
+export function drawPolarJets(ctx, cx, cy, radius, intensity, time, coreTemperature = 1.0) {
+  // Apply magnetic collimation
+  const pressure = magneticPressure(intensity, coreTemperature);
+  
+  // Collimated width: high pressure → needle-thin beams
+  const baseWidth = radius * 0.22;
+  const width = baseWidth * (1 - pressure * 0.6);
+  
+  // Collimated length: high pressure → longer, more focused jets
+  const baseLength = radius * 4;
+  const length = baseLength * (1 + pressure * 0.4);
 
   const pulse = 0.6 + Math.sin(time * 4) * 0.4;
   const alpha = 0.25 + intensity * 0.5;
@@ -215,11 +234,18 @@ export function spawnJetParticles(cx, cy, radius, intensity, coreTemperature, ti
 
   // Apply magnetic corkscrew helix
   const helix = jetHelix(time, intensity);
+  
+  // Apply magnetic collimation to particle spread
+  const pressure = magneticPressure(intensity, coreTemperature);
+  const spread = (1 - pressure) * 12; // degrees/px offset: high pressure → tight beam
 
   // TOP jet
   if (Math.random() < spawnRate) {
+    const angleOffset = (Math.random() - 0.5) * spread;
+    const xOffset = Math.sin(angleOffset) * 4;
+    
     jetParticles.push({
-      x: cx + helix.hx * radius,
+      x: cx + helix.hx * radius + xOffset,
       y: cy - radius + helix.hy * radius,
       speed: 6 + intensity * 10,   // Recommended: fast, energetic
       life: 1,
@@ -233,8 +259,11 @@ export function spawnJetParticles(cx, cy, radius, intensity, coreTemperature, ti
 
   // BOTTOM jet
   if (Math.random() < spawnRate) {
+    const angleOffset = (Math.random() - 0.5) * spread;
+    const xOffset = Math.sin(angleOffset) * 4;
+    
     jetParticles.push({
-      x: cx - helix.hx * radius,
+      x: cx - helix.hx * radius + xOffset,
       y: cy + radius - helix.hy * radius,
       speed: 6 + intensity * 10,
       life: 1,
@@ -388,14 +417,20 @@ export function relativisticBeaming(tiltX, tiltY) {
  * @param {number} intensity - Jet intensity (0.0-1.0)
  * @param {number} time - Animation time in seconds
  */
-export function spawnJetKnots(cx, cy, radius, intensity, time) {
+export function spawnJetKnots(cx, cy, radius, intensity, time, coreTemperature = 1.0) {
   // Apply magnetic corkscrew helix
   const helix = jetHelix(time, intensity);
+  
+  // Apply magnetic collimation to shock knot spread
+  const pressure = magneticPressure(intensity, coreTemperature);
+  const knotSpread = (1 - pressure) * 8; // high pressure → narrow channel
 
   // Top jet knots
   if (Math.random() < 0.1 * intensity) {
+    const kx = (Math.random() - 0.5) * knotSpread;
+    
     jetKnots.push({
-      x: cx + helix.hx * radius,
+      x: cx + helix.hx * radius + kx,
       y: cy - radius + helix.hy * radius,
       dir: -1,
       t: 0,
@@ -407,8 +442,10 @@ export function spawnJetKnots(cx, cy, radius, intensity, time) {
   
   // Bottom jet knots
   if (Math.random() < 0.1 * intensity) {
+    const kx = (Math.random() - 0.5) * knotSpread;
+    
     jetKnots.push({
-      x: cx - helix.hx * radius,
+      x: cx - helix.hx * radius + kx,
       y: cy + radius - helix.hy * radius,
       dir: 1,
       t: 0,

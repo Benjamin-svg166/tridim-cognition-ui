@@ -9,7 +9,7 @@ import { granulationIntensity } from './granulation.js';
 import { drawMagneticArcs } from './magneticArcs.js';
 import { whiteDwarfCooling } from './coolingCurve.js';
 import { starspotPenumbra, starspotLatitudeBias, starspotLifecycle, flareFromSpots, polarSpotBias, drawStarspots } from './starspots.js';
-import { jetIntensity, drawPolarJets, drawJetGlow, spawnJetParticles, updateJetParticles, drawAccretionDisk, relativisticBeaming, spawnJetKnots, updateJetKnots, jetPrecession } from './jets.js';
+import { jetIntensity, magneticPressure, drawPolarJets, drawJetGlow, spawnJetParticles, updateJetParticles, drawAccretionDisk, relativisticBeaming, spawnJetKnots, updateJetKnots, jetPrecession } from './jets.js';
 
 const NODE_RADIUS = 3;
 const HIGHLIGHT_RADIUS = 5;
@@ -406,15 +406,15 @@ const NineDCubeRenderer = ({
         const beamBoost = relativisticBeaming(tiltX, tiltY);
         const beamedIntensity = Math.min(1, jets * beamBoost);
         
-        // Draw jet glow and beams with precession + relativistic beaming
+        // Draw jet glow and beams with precession + relativistic beaming + magnetic collimation
         drawJetGlow(ctx, centerX, centerY, sphereRadius, beamedIntensity);
-        drawPolarJets(ctx, centerX, centerY, sphereRadius, beamedIntensity, time);
+        drawPolarJets(ctx, centerX, centerY, sphereRadius, beamedIntensity, time, coreTempRef.current);
         
         // Spawn jet particles with temperature-tinted plasma
         spawnJetParticles(centerX, centerY, sphereRadius, jets, coreTempRef.current, time);
         
-        // Spawn shock knots (bright pulses)
-        spawnJetKnots(centerX, centerY, sphereRadius, jets, time);
+        // Spawn shock knots (bright pulses) with magnetic collimation
+        spawnJetKnots(centerX, centerY, sphereRadius, jets, time, coreTempRef.current);
         
         // Store jet intensity and disk warp for particle updates
         sphereData.jets = jets;
