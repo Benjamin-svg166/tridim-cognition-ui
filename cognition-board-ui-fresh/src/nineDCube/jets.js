@@ -16,6 +16,9 @@ const jetTips = [
 // Shock compression particles (compressed plasma ahead of jet tips)
 let shockParticles = [];
 
+// Mach disk turbulence particles (chaotic plasma around shock surfaces)
+let machTurbulence = [];
+
 /**
  * Calculate disk shadow factor for occlusion
  * @param {number} y - Y coordinate of particle/knot
@@ -677,6 +680,152 @@ export function drawJetTips(ctx, cx, cy, sphereRadius, jetLength, pressure, time
       ctx.arc(x, y, halo, 0, Math.PI * 2);
       ctx.stroke();
     }
+  }
+
+  ctx.restore();
+}
+
+/**
+ * Calculate Mach disk strength (over-pressured jet shock surface)
+ * @param {number} jets - Jet intensity (0.0-1.0)
+ * @param {number} pressure - Magnetic pressure (0.0-1.0)
+ * @returns {number} Mach disk strength (0.0-1.0)
+ */
+export function machDiskStrength(jets, pressure) {
+  // Mach disks only form when jets are over-pressured
+  return Math.max(0, jets * 0.7 + pressure * 0.6 - 0.8);
+}
+
+/**
+ * Update Mach disk positions and spawn turbulence particles
+ * @param {number} dt - Delta time since last frame
+ * @param {number} cx - Center X coordinate
+ * @param {number} cy - Center Y coordinate
+ * @param {number} sphereRadius - Sphere radius
+ * @param {number} jetLength - Length of jets
+ * @param {number} jets - Jet intensity (0.0-1.0)
+ * @param {number} pressure - Magnetic pressure (0.0-1.0)
+ * @param {number} time - Animation time for precession/helix
+ */
+export function updateMachDisks(dt, cx, cy, sphereRadius, jetLength, jets, pressure, time) {
+  const strength = machDiskStrength(jets, pressure);
+  
+  if (strength < 0.05) {
+    // Clear turbulence when no Mach disk
+    machTurbulence = [];
+    return;
+  }
+
+  // Get current jet direction offsets (precession + helix)
+  const prec = jetPrecession(time, jets);
+  const helix = jetHelix(time, jets);
+
+  // Mach disk position: halfway down each jet
+  const diskDistance = jetLength * 0.55;
+
+  // Top and bottom jet Mach disks
+  for (const dir of [-1, 1]) {
+    // Apply precession and helix to position
+    const precX = dir === -1 ? prec.x * sphereRadius : -prec.x * sphereRadius;
+    const precY = dir === -1 ? prec.y * sphereRadius : -prec.y * sphereRadius;
+    const helixX = dir === -1 ? helix.hx * sphereRadius : -helix.hx * sphereRadius;
+    const helixY = dir === -1 ? helix.hy * sphereRadius : -helix.hy * sphereRadius;
+
+    const diskX = cx + precX + helixX;
+    const diskY = cy + dir * (sphereRadius + diskDistance) + precY + helixY;
+
+    // Spawn turbulence particles around disk edge
+    if (Math.random() < strength * 0.4) {
+      const diskRadius = 12 + strength * 18;
+      const angle = Math.random() * Math.PI * 2;
+      const edgeDist = diskRadius + Math.random() * 4;
+
+      machTurbulence.push({
+        x: diskX + Math.cos(angle) * edgeDist,
+        y: diskY + Math.sin(angle) * edgeDist,
+        size: 2,
+        life: 1,
+        strength
+      });
+    }
+  }
+
+  // Update turbulence particles
+  for (const p of machTurbulence) {
+    p.life -= dt * 1.8;
+    p.size += dt * 6;
+  }
+
+  // Remove dead particles
+  machTurbulence = machTurbulence.filter(p => p.life > 0);
+}
+
+/**
+ * Draw Mach disks (bright shock surfaces) inside jets
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {number} cx - Center X coordinate
+ * @param {number} cy - Center Y coordinate
+ * @param {number} sphereRadius - Sphere radius
+ * @param {number} jetLength - Length of jets
+ * @param {number} jets - Jet intensity (0.0-1.0)
+ * @param {number} pressure - Magnetic pressure (0.0-1.0)
+ * @param {number} time - Animation time for precession/helix and pulsing
+ */
+export function drawMachDisks(ctx, cx, cy, sphereRadius, jetLength, jets, pressure, time) {
+  const strength = machDiskStrength(jets, pressure);
+  
+  if (strength < 0.05) return; // No disk to draw
+
+  // Get current jet direction offsets (precession + helix)
+  const prec = jetPrecession(time, jets);
+  const helix = jetHelix(time, jets);
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+
+  // Draw turbulence particles first (behind disks)
+  for (const p of machTurbulence) {
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.2 * p.life})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Mach disk position: halfway down each jet
+  const diskDistance = jetLength * 0.55;
+
+  // Pulsing effect: subtle high-frequency throb
+  const pulse = 1 + Math.sin(time * 6) * 0.1 * strength;
+
+  // Draw Mach disks for top and bottom jets
+  for (const dir of [-1, 1]) {
+    // Apply precession and helix to position
+    const precX = dir === -1 ? prec.x * sphereRadius : -prec.x * sphereRadius;
+    const precY = dir === -1 ? prec.y * sphereRadius : -prec.y * sphereRadius;
+    const helixX = dir === -1 ? helix.hx * sphereRadius : -helix.hx * sphereRadius;
+    const helixY = dir === -1 ? helix.hy * sphereRadius : -helix.hy * sphereRadius;
+
+    const diskX = cx + precX + helixX;
+    const diskY = cy + dir * (sphereRadius + diskDistance) + precY + helixY;
+
+    // Disk size: larger when over-pressured
+    const baseRadius = 12 + strength * 18; // 12-30px range
+    const radius = baseRadius * pulse;
+
+    // Disk brightness: increases with strength
+    const alpha = 0.25 + strength * 0.5; // 0.25-0.75 range
+
+    // Draw bright circular Mach disk
+    ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(diskX, diskY, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Add subtle blue tint for plasma appearance
+    ctx.fillStyle = `rgba(200, 230, 255, ${alpha * 0.4})`;
+    ctx.beginPath();
+    ctx.arc(diskX, diskY, radius * 0.7, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   ctx.restore();

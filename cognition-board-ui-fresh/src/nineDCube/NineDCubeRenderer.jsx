@@ -9,7 +9,7 @@ import { granulationIntensity } from './granulation.js';
 import { drawMagneticArcs } from './magneticArcs.js';
 import { whiteDwarfCooling } from './coolingCurve.js';
 import { starspotPenumbra, starspotLatitudeBias, starspotLifecycle, flareFromSpots, polarSpotBias, drawStarspots } from './starspots.js';
-import { jetIntensity, magneticPressure, drawPolarJets, drawJetGlow, spawnJetParticles, updateJetParticles, drawAccretionDisk, relativisticBeaming, spawnJetKnots, updateJetKnots, updateJetTips, drawJetTips, jetPrecession } from './jets.js';
+import { jetIntensity, magneticPressure, drawPolarJets, drawJetGlow, spawnJetParticles, updateJetParticles, drawAccretionDisk, relativisticBeaming, spawnJetKnots, updateJetKnots, updateJetTips, drawJetTips, machDiskStrength, updateMachDisks, drawMachDisks, jetPrecession } from './jets.js';
 
 const NODE_RADIUS = 3;
 const HIGHLIGHT_RADIUS = 5;
@@ -812,6 +812,10 @@ const NineDCubeRenderer = ({
         
         updateJetTips(dt, jets, pressure, centerX, centerY, sphereRadius, jetLength, time);
         drawJetTips(ctx, centerX, centerY, sphereRadius, jetLength, pressure, time, jets);
+        
+        // Update and draw Mach disks (over-pressured shock surfaces)
+        updateMachDisks(dt, centerX, centerY, sphereRadius, jetLength, jets, pressure, time);
+        drawMachDisks(ctx, centerX, centerY, sphereRadius, jetLength, jets, pressure, time);
       }
       
       // Optional: Draw edges with spherical projection (subtle, for structure)
