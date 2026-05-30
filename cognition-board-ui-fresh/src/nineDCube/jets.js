@@ -13,6 +13,9 @@ const jetTips = [
   { dir: 1, t: 0, speed: 1, life: 1 },  // bottom jet (dir 1 = downward)
 ];
 
+// Shock compression particles (compressed plasma ahead of jet tips)
+let shockParticles = [];
+
 /**
  * Calculate disk shadow factor for occlusion
  * @param {number} y - Y coordinate of particle/knot
@@ -47,6 +50,17 @@ function diskShadowFactor(y, diskYTop, diskYBottom, shadowStrength = 1.0) {
  */
 export function magneticPressure(jets, coreTemperature) {
   return Math.min(1, jets * 0.6 + coreTemperature * 0.4);
+}
+
+/**
+ * Calculate shock compression strength for jet tips
+ * @param {number} tipSpeed - Speed of jet tip (0.4-1.2)
+ * @param {number} jets - Jet intensity (0.0-1.0)
+ * @param {number} pressure - Magnetic pressure (0.0-1.0)
+ * @returns {number} Compression factor (0.0-1.0)
+ */
+export function shockCompression(tipSpeed, jets, pressure) {
+  return Math.min(1, tipSpeed * 0.5 + jets * 0.3 + pressure * 0.4);
 }
 
 /**
@@ -517,11 +531,18 @@ export function updateJetKnots(ctx, dt, centerY, sphereRadius, shadowStrength = 
  * @param {number} jets - Jet intensity (0.0-1.0)
  * @param {number} pressure - Magnetic pressure for collimation (0.0-1.0)
  */
-export function updateJetTips(dt, jets, pressure) {
+export function updateJetTips(dt, jets, pressure, cx, cy, sphereRadius, jetLength, time) {
   // Speed increases with jet intensity and magnetic collimation
   const baseSpeed = 0.4 + jets * 0.8;           // 0.4-1.2 range
   const collimationBoost = 0.4 + pressure * 0.6; // 0.4-1.0 range
   const speed = baseSpeed * collimationBoost;    // faster when strong + collimated
+
+  // Calculate shock compression strength
+  const compression = shockCompression(speed, jets, pressure);
+
+  // Get current jet direction offsets (precession + helix)
+  const prec = jetPrecession(time, jets);
+  const helix = jetHelix(time, jets);
 
   for (const tip of jetTips) {
     tip.speed = speed;
@@ -535,7 +556,44 @@ export function updateJetTips(dt, jets, pressure) {
 
     // Fade slightly over distance
     tip.life = Math.max(0.6, 1 - tip.t * 0.3);
+
+    // Spawn shock compression particles ahead of the tip
+    if (Math.random() < compression * 0.3) {
+      const distance = tip.t * jetLength;
+      const dir = tip.dir;
+
+      // Apply precession and helix to position
+      const precX = dir === -1 ? prec.x * sphereRadius : -prec.x * sphereRadius;
+      const precY = dir === -1 ? prec.y * sphereRadius : -prec.y * sphereRadius;
+      const helixX = dir === -1 ? helix.hx * sphereRadius : -helix.hx * sphereRadius;
+      const helixY = dir === -1 ? helix.hy * sphereRadius : -helix.hy * sphereRadius;
+
+      // Spawn slightly ahead of tip
+      const ahead = 8 + compression * 12;
+      const x = cx + precX + helixX;
+      const y = cy + dir * (sphereRadius + distance + ahead) + precY + helixY;
+
+      shockParticles.push({
+        x,
+        y,
+        size: 2,
+        life: 1,
+        compression
+      });
+    }
   }
+
+  // Update shock particles
+  for (const s of shockParticles) {
+    s.life -= dt * 2.2;
+    s.size += dt * 18;
+    // Slight lateral drift
+    s.x += (Math.random() - 0.5) * 2;
+    s.y += (Math.random() - 0.5) * 2;
+  }
+
+  // Remove dead particles
+  shockParticles = shockParticles.filter(s => s.life > 0);
 }
 
 /**
@@ -558,6 +616,20 @@ export function drawJetTips(ctx, cx, cy, sphereRadius, jetLength, pressure, time
 
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
+
+  // Draw shock compression particles first (behind tips)
+  for (const s of shockParticles) {
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.25 * s.life})`;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Calculate compression for halos
+  const baseSpeed = 0.4 + intensity * 0.8;
+  const collimationBoost = 0.4 + pressure * 0.6;
+  const speed = baseSpeed * collimationBoost;
+  const compression = shockCompression(speed, intensity, pressure);
 
   for (const tip of jetTips) {
     // Calculate position along jet
@@ -595,6 +667,16 @@ export function drawJetTips(ctx, cx, cy, sphereRadius, jetLength, pressure, time
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fill();
+
+    // Draw compression halo around tip (punching through space)
+    if (compression > 0.3) {
+      const halo = 6 + compression * 12;
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.15 * compression * tip.life})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, halo, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   }
 
   ctx.restore();

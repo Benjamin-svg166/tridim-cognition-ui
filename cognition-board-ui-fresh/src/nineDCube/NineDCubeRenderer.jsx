@@ -808,9 +808,10 @@ const NineDCubeRenderer = ({
         const pressure = magneticPressure(jets, coreTempRef.current);
         const baseLength = sphereRadius * 4;
         const jetLength = baseLength * (1 + pressure * 0.4);
+        const centerX = canvas.width / 2;
         
-        updateJetTips(dt, jets, pressure);
-        drawJetTips(ctx, canvas.width / 2, centerY, sphereRadius, jetLength, pressure, time, jets);
+        updateJetTips(dt, jets, pressure, centerX, centerY, sphereRadius, jetLength, time);
+        drawJetTips(ctx, centerX, centerY, sphereRadius, jetLength, pressure, time, jets);
       }
       
       // Optional: Draw edges with spherical projection (subtle, for structure)
