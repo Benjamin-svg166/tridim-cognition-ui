@@ -70,6 +70,33 @@ export function shockCompression(tipSpeed, jets, pressure) {
 }
 
 /**
+ * Synchrotron color mapping (energy → RGB color)
+ * High-energy electrons radiate blue/white near source, cooling to yellow/orange downstream
+ * @param {number} energy - Energy level (0.0-1.0, where 1.0 = maximum energy)
+ * @returns {string} RGB values as comma-separated string (for use in rgba())
+ */
+function synchrotronColor(energy) {
+  if (energy > 0.7) {
+    // High energy: blue-white (hot synchrotron emission)
+    const t = (energy - 0.7) / 0.3;  // 0-1 range within high energy regime
+    const r = 255;
+    const g = Math.floor(255 - t * 80);  // 175-255 (bluer at higher energy)
+    const b = 255;
+    return `${r},${g},${b}`;
+  }
+  if (energy > 0.3) {
+    // Medium energy: pure white
+    return '255,255,255';
+  }
+  // Low energy: warm yellow/orange (cooled synchrotron)
+  const t = energy / 0.3;  // 0-1 range within low energy regime
+  const r = 255;
+  const g = Math.floor(200 + t * 55);  // 200-255
+  const b = Math.floor(80 + t * 175);  // 80-255
+  return `${r},${g},${b}`;
+}
+
+/**
  * Calculate jet intensity based on stellar phase and activity
  * @param {string} phase - Current supernova phase
  * @param {number} flareActivity - Flare activity level (0.0-1.0)
@@ -140,8 +167,14 @@ export function drawPolarJets(ctx, cx, cy, radius, intensity, time, coreTemperat
     topX, 
     cy - length + topOffsetY
   );
-  gradTop.addColorStop(0, `rgba(180,220,255,${alpha})`);
-  gradTop.addColorStop(1, `rgba(180,220,255,0)`);
+  // Synchrotron gradient: blue-white at base → white → orange at far end
+  const baseEnergy = 1.0;  // Maximum energy near star
+  const farEnergy = 0.3;   // Cooled energy at jet end
+  const midEnergy = 0.65;  // Medium energy at mid-jet
+  
+  gradTop.addColorStop(0, `rgba(${synchrotronColor(baseEnergy)},${alpha})`);
+  gradTop.addColorStop(0.5, `rgba(${synchrotronColor(midEnergy)},${alpha * 0.8})`);
+  gradTop.addColorStop(1, `rgba(${synchrotronColor(farEnergy)},0)`);
 
   ctx.fillStyle = gradTop;
   ctx.beginPath();
@@ -161,8 +194,9 @@ export function drawPolarJets(ctx, cx, cy, radius, intensity, time, coreTemperat
     botX, 
     cy + length + botOffsetY
   );
-  gradBot.addColorStop(0, `rgba(180,220,255,${alpha})`);
-  gradBot.addColorStop(1, `rgba(180,220,255,0)`);
+  gradBot.addColorStop(0, `rgba(${synchrotronColor(baseEnergy)},${alpha})`);
+  gradBot.addColorStop(0.5, `rgba(${synchrotronColor(midEnergy)},${alpha * 0.8})`);
+  gradBot.addColorStop(1, `rgba(${synchrotronColor(farEnergy)},0)`);
 
   ctx.fillStyle = gradBot;
   ctx.beginPath();
@@ -279,7 +313,8 @@ export function spawnJetParticles(cx, cy, radius, intensity, coreTemperature, ti
       dir: -1,                     // upward
       coreTemperature,
       helixX: helix.hx * radius,   // Store initial helix offset for widening
-      helixY: helix.hy * radius
+      helixY: helix.hy * radius,
+      energy: 1.0                  // Spawn at maximum energy (near star)
     });
   }
 
@@ -297,7 +332,8 @@ export function spawnJetParticles(cx, cy, radius, intensity, coreTemperature, ti
       dir: 1,                      // downward
       coreTemperature,
       helixX: -helix.hx * radius,  // Store initial helix offset for widening
-      helixY: -helix.hy * radius
+      helixY: -helix.hy * radius,
+      energy: 1.0                  // Spawn at maximum energy (near star)
     });
   }
 }
@@ -340,10 +376,12 @@ export function updateJetParticles(ctx, dt, time, intensity, centerY, sphereRadi
     // Recommended: slower decay for long streaks
     p.life -= dt * 0.25;
 
-    // Temperature-tinted plasma color
-    const r = 200 + p.coreTemperature * 30;
-    const g = 220;
-    const b = 255 - p.coreTemperature * 40;
+    // Synchrotron cooling: energy decreases as particle travels
+    p.energy -= dt * 0.4;  // Cool over time
+    p.energy = Math.max(0, p.energy);
+
+    // Synchrotron color based on energy
+    const rgb = synchrotronColor(p.energy);
 
     // Disk shadowing: occlude particles passing through the accretion disk
     const diskHalfThickness = sphereRadius * 0.35;
@@ -352,7 +390,7 @@ export function updateJetParticles(ctx, dt, time, intensity, centerY, sphereRadi
     const shadow = diskShadowFactor(p.y, diskYTop, diskYBottom, shadowStrength);
     const alpha = p.life * shadow;
 
-    ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+    ctx.fillStyle = `rgba(${rgb},${alpha})`;
     ctx.beginPath();
     ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
     ctx.fill();
@@ -462,7 +500,8 @@ export function spawnJetKnots(cx, cy, radius, intensity, time, coreTemperature =
       t: 0,
       speed: 3 + intensity * 6,
       helixX: helix.hx * radius,   // Store initial helix offset for widening
-      helixY: helix.hy * radius
+      helixY: helix.hy * radius,
+      energy: 1.0                  // Spawn at maximum energy
     });
   }
   
@@ -477,7 +516,8 @@ export function spawnJetKnots(cx, cy, radius, intensity, time, coreTemperature =
       t: 0,
       speed: 3 + intensity * 6,
       helixX: -helix.hx * radius,  // Store initial helix offset for widening
-      helixY: -helix.hy * radius
+      helixY: -helix.hy * radius,
+      energy: 1.0                  // Spawn at maximum energy
     });
   }
 }
@@ -505,8 +545,15 @@ export function updateJetKnots(ctx, dt, centerY, sphereRadius, shadowStrength = 
     const spiralFactor = 1 + k.t * 0.5; // Grows over time
     k.x += k.helixX * spiralFactor * dt * 0.3;
 
+    // Synchrotron cooling: energy decreases as knot travels
+    k.energy -= dt * 0.35;  // Cool slightly slower than particles
+    k.energy = Math.max(0, k.energy);
+
     const life = Math.max(0, 1 - k.t * 0.4); // fade over time
     const radius = 4 + k.t * 3;
+
+    // Synchrotron color based on energy
+    const rgb = synchrotronColor(k.energy);
 
     // Disk shadowing: occlude knots passing through the accretion disk
     const diskHalfThickness = sphereRadius * 0.35;
@@ -515,7 +562,7 @@ export function updateJetKnots(ctx, dt, centerY, sphereRadius, shadowStrength = 
     const shadow = diskShadowFactor(k.y, diskYTop, diskYBottom, shadowStrength);
     const alpha = life * shadow;
 
-    ctx.fillStyle = `rgba(${colorBase.r},${colorBase.g},${colorBase.b},${alpha})`;
+    ctx.fillStyle = `rgba(${rgb},${alpha})`;
     ctx.beginPath();
     ctx.arc(k.x, k.y, radius, 0, Math.PI * 2);
     ctx.fill();
@@ -584,7 +631,8 @@ export function updateJetTips(dt, jets, pressure, cx, cy, sphereRadius, jetLengt
         y,
         size: 2,
         life: 1,
-        compression
+        compression,
+        energy: 1 - (distance / jetLength) * 0.7  // Energy based on distance from star
       });
     }
   }
@@ -625,7 +673,8 @@ export function drawJetTips(ctx, cx, cy, sphereRadius, jetLength, pressure, time
 
   // Draw shock compression particles first (behind tips)
   for (const s of shockParticles) {
-    ctx.fillStyle = `rgba(255, 255, 255, ${0.25 * s.life})`;
+    const rgb = synchrotronColor(s.energy);
+    ctx.fillStyle = `rgba(${rgb}, ${0.25 * s.life})`;
     ctx.beginPath();
     ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
     ctx.fill();
@@ -663,11 +712,15 @@ export function drawJetTips(ctx, cx, cy, sphereRadius, jetLength, pressure, time
     const baseBrightness = 0.4 + intensity * 0.4;
     const brightness = Math.min(1, baseBrightness * beamBoost * tip.life);
 
-    // Draw bright tip with gradient
+    // Calculate energy based on tip position
+    const tipEnergy = 1 - (distance / jetLength) * 0.7;
+    const rgb = synchrotronColor(tipEnergy);
+
+    // Draw bright tip with synchrotron gradient
     const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
-    grad.addColorStop(0, `rgba(255, 255, 255, ${brightness})`);
-    grad.addColorStop(0.5, `rgba(200, 230, 255, ${brightness * 0.6})`);
-    grad.addColorStop(1, `rgba(180, 220, 255, 0)`);
+    grad.addColorStop(0, `rgba(${rgb}, ${brightness})`);
+    grad.addColorStop(0.5, `rgba(${rgb}, ${brightness * 0.6})`);
+    grad.addColorStop(1, `rgba(${rgb}, 0)`);
 
     ctx.fillStyle = grad;
     ctx.beginPath();
@@ -677,7 +730,7 @@ export function drawJetTips(ctx, cx, cy, sphereRadius, jetLength, pressure, time
     // Draw compression halo around tip (punching through space)
     if (compression > 0.3) {
       const halo = 6 + compression * 12;
-      ctx.strokeStyle = `rgba(255, 255, 255, ${0.15 * compression * tip.life})`;
+      ctx.strokeStyle = `rgba(${rgb}, ${0.15 * compression * tip.life})`;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(x, y, halo, 0, Math.PI * 2);
@@ -744,12 +797,16 @@ export function updateMachDisks(dt, cx, cy, sphereRadius, jetLength, jets, press
       const angle = Math.random() * Math.PI * 2;
       const edgeDist = diskRadius + Math.random() * 4;
 
+      // Mach disk is at 55% of jet length
+      const diskEnergy = 1 - (diskDistance / jetLength) * 0.7;
+      
       machTurbulence.push({
         x: diskX + Math.cos(angle) * edgeDist,
         y: diskY + Math.sin(angle) * edgeDist,
         size: 2,
         life: 1,
-        strength
+        strength,
+        energy: diskEnergy  // High-energy shock surface
       });
     }
 
@@ -832,9 +889,15 @@ export function drawMachDisks(ctx, cx, cy, sphereRadius, jetLength, jets, pressu
       // Eddy size: smaller near disk, larger downstream
       const size = 2 + t * 4; // 2-6px range
 
-      // Draw turbulence eddy
+      // Synchrotron cooling downstream: energy decreases with distance from disk
+      // Disk already has cooled energy, cone cools further
+      const diskEnergy = 1 - (0.55 * 0.7);  // Energy at disk position (~0.62)
+      const eddyEnergy = diskEnergy * (1 - t * 0.5);  // Cool further downstream
+      const rgb = synchrotronColor(eddyEnergy);
+
+      // Draw turbulence eddy with energy-based color
       const alpha = 0.18 * lifeFactor * (1 - t * 0.3); // Fade slightly with distance
-      ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+      ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
       ctx.beginPath();
       ctx.arc(x, y, size, 0, Math.PI * 2);
       ctx.fill();
@@ -843,7 +906,8 @@ export function drawMachDisks(ctx, cx, cy, sphereRadius, jetLength, jets, pressu
 
   // Draw turbulence particles (behind disks)
   for (const p of machTurbulence) {
-    ctx.fillStyle = `rgba(255, 255, 255, ${0.2 * p.life})`;
+    const rgb = synchrotronColor(p.energy);
+    ctx.fillStyle = `rgba(${rgb}, ${0.2 * p.life})`;
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
     ctx.fill();
@@ -873,14 +937,18 @@ export function drawMachDisks(ctx, cx, cy, sphereRadius, jetLength, jets, pressu
     // Disk brightness: increases with strength
     const alpha = 0.25 + strength * 0.5; // 0.25-0.75 range
 
-    // Draw bright circular Mach disk
-    ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+    // Mach disk energy: high-energy shock surface (blue-white)
+    const diskEnergy = 1 - (diskDistance / jetLength) * 0.7;
+    const rgb = synchrotronColor(diskEnergy);
+
+    // Draw bright circular Mach disk with synchrotron color
+    ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
     ctx.beginPath();
     ctx.arc(diskX, diskY, radius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Add subtle blue tint for plasma appearance
-    ctx.fillStyle = `rgba(200, 230, 255, ${alpha * 0.4})`;
+    // Add subtle plasma core (slightly brighter)
+    ctx.fillStyle = `rgba(${rgb}, ${alpha * 0.5})`;
     ctx.beginPath();
     ctx.arc(diskX, diskY, radius * 0.7, 0, Math.PI * 2);
     ctx.fill();
