@@ -19,6 +19,9 @@ let shockParticles = [];
 // Mach disk turbulence particles (chaotic plasma around shock surfaces)
 let machTurbulence = [];
 
+// Turbulence cones (downstream chaos from Mach disks)
+let turbulenceCones = [];
+
 /**
  * Calculate disk shadow factor for occlusion
  * @param {number} y - Y coordinate of particle/knot
@@ -713,6 +716,7 @@ export function updateMachDisks(dt, cx, cy, sphereRadius, jetLength, jets, press
   if (strength < 0.05) {
     // Clear turbulence when no Mach disk
     machTurbulence = [];
+    turbulenceCones = [];
     return;
   }
 
@@ -748,6 +752,22 @@ export function updateMachDisks(dt, cx, cy, sphereRadius, jetLength, jets, press
         strength
       });
     }
+
+    // Spawn turbulence cones downstream from Mach disk
+    if (strength > 0.4 && Math.random() < 0.08) {
+      const coneLength = jetLength * (0.25 + strength * 0.35); // 25-60% of jet
+      const maxWidth = 18 + strength * 26;                     // 18-44px
+
+      turbulenceCones.push({
+        x: diskX,
+        y: diskY,
+        dir: dir, // -1 for top (upward), +1 for bottom (downward)
+        length: coneLength,
+        maxWidth,
+        strength,
+        life: 1,
+      });
+    }
   }
 
   // Update turbulence particles
@@ -758,6 +778,14 @@ export function updateMachDisks(dt, cx, cy, sphereRadius, jetLength, jets, press
 
   // Remove dead particles
   machTurbulence = machTurbulence.filter(p => p.life > 0);
+
+  // Update turbulence cones
+  for (const c of turbulenceCones) {
+    c.life -= dt * 0.7; // cones live ~1.4s
+  }
+
+  // Remove dead cones
+  turbulenceCones = turbulenceCones.filter(c => c.life > 0);
 }
 
 /**
@@ -783,7 +811,37 @@ export function drawMachDisks(ctx, cx, cy, sphereRadius, jetLength, jets, pressu
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
 
-  // Draw turbulence particles first (behind disks)
+  // Draw turbulence cones first (furthest back)
+  for (const cone of turbulenceCones) {
+    const spawnCount = 3 + Math.floor(cone.strength * 4); // 3-7 eddies per cone per frame
+    const lifeFactor = cone.life; // Cone fades as it ages
+
+    for (let i = 0; i < spawnCount; i++) {
+      // Random position inside cone
+      const t = Math.random(); // Position along cone length (0-1)
+      const distance = t * cone.length;
+      const widthAtT = cone.maxWidth * t; // Cone widens linearly
+
+      // Random lateral offset within cone width
+      const lateralOffset = (Math.random() - 0.5) * widthAtT;
+
+      // Calculate position
+      const x = cone.x + lateralOffset;
+      const y = cone.y + cone.dir * distance;
+
+      // Eddy size: smaller near disk, larger downstream
+      const size = 2 + t * 4; // 2-6px range
+
+      // Draw turbulence eddy
+      const alpha = 0.18 * lifeFactor * (1 - t * 0.3); // Fade slightly with distance
+      ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Draw turbulence particles (behind disks)
   for (const p of machTurbulence) {
     ctx.fillStyle = `rgba(255, 255, 255, ${0.2 * p.life})`;
     ctx.beginPath();
