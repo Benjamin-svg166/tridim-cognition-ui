@@ -1435,7 +1435,6 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
       }
     };
   }, []);
-  }, [moveHistory, toMove, undo, redo]);
 
   // Cleanup WebGL contexts on unmount to prevent context limit issues
   useEffect(() => {
