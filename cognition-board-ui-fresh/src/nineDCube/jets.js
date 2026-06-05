@@ -97,6 +97,30 @@ function synchrotronColor(energy) {
 }
 
 /**
+ * Calculate Kelvin-Helmholtz shear ripple offset
+ * KH instability creates wave-like distortions along jet edges due to velocity shear
+ * @param {number} dNorm - Normalized distance along jet (0.0-1.0)
+ * @param {number} time - Animation time in seconds
+ * @param {number} jets - Jet intensity (0.0-1.0)
+ * @param {number} pressure - Magnetic pressure (0.0-1.0)
+ * @returns {number} Ripple offset in pixels (perpendicular to jet direction)
+ */
+function kelvinHelmholtzRipple(dNorm, time, jets, pressure) {
+  // KH instability strength increases with jet velocity and magnetic pressure
+  const shearAmp = 3 + pressure * 6;      // 3-9px ripple amplitude
+  const shearFreq = 8 + jets * 6;         // 8-14 waves along jet
+  const shearSpeed = 4 + pressure * 3;    // 4-7 rad/s temporal oscillation
+
+  // Sinusoidal wave with temporal animation
+  // Damped downstream: KH is strongest near the base
+  const dampFactor = 1 - dNorm * 0.6;     // 1.0 at base → 0.4 at far end
+  
+  return Math.sin(dNorm * shearFreq * Math.PI * 2 + time * shearSpeed) 
+         * shearAmp 
+         * dampFactor;
+}
+
+/**
  * Calculate jet intensity based on stellar phase and activity
  * @param {string} phase - Current supernova phase
  * @param {number} flareActivity - Flare activity level (0.0-1.0)
@@ -143,6 +167,11 @@ export function drawPolarJets(ctx, cx, cy, radius, intensity, time, coreTemperat
   const pulse = 0.6 + Math.sin(time * 4) * 0.4;
   const alpha = 0.25 + intensity * 0.5;
 
+  // Kelvin-Helmholtz shear modulation on beam width (subtle breathing effect)
+  // Sample at mid-jet (dNorm=0.5) for consistent modulation
+  const khMidRipple = kelvinHelmholtzRipple(0.5, time, intensity, pressure);
+  const khWidthMod = 1 + (khMidRipple / width) * 0.15; // ±15% width modulation
+
   // Apply jet precession (wobble)
   const prec = jetPrecession(time, intensity);
   const topOffsetX = prec.x * radius;
@@ -181,7 +210,7 @@ export function drawPolarJets(ctx, cx, cy, radius, intensity, time, coreTemperat
   ctx.ellipse(
     topX, 
     topY, 
-    width * pulse, 
+    width * pulse * khWidthMod,  // Apply KH width modulation
     length / 2, 
     0, 0, Math.PI * 2
   );
@@ -203,7 +232,7 @@ export function drawPolarJets(ctx, cx, cy, radius, intensity, time, coreTemperat
   ctx.ellipse(
     botX, 
     botY, 
-    width * pulse, 
+    width * pulse * khWidthMod,  // Apply KH width modulation
     length / 2, 
     0, 0, Math.PI * 2
   );
@@ -299,13 +328,19 @@ export function spawnJetParticles(cx, cy, radius, intensity, coreTemperature, ti
   const pressure = magneticPressure(intensity, coreTemperature);
   const spread = (1 - pressure) * 12; // degrees/px offset: high pressure → tight beam
 
+  // Kelvin-Helmholtz ripple at spawn position (dNorm=0, base of jet)
+  const khRipple = kelvinHelmholtzRipple(0, time, intensity, pressure);
+
   // TOP jet
   if (Math.random() < spawnRate) {
     const angleOffset = (Math.random() - 0.5) * spread;
     const xOffset = Math.sin(angleOffset) * 4;
     
+    // Apply KH ripple perpendicular to jet direction (horizontal for vertical jet)
+    const khOffset = khRipple * 0.4;  // 40% of ripple amplitude
+    
     jetParticles.push({
-      x: cx + helix.hx * radius + xOffset,
+      x: cx + helix.hx * radius + xOffset + khOffset,
       y: cy - radius + helix.hy * radius,
       speed: 6 + intensity * 10,   // Recommended: fast, energetic
       life: 1,
@@ -323,8 +358,11 @@ export function spawnJetParticles(cx, cy, radius, intensity, coreTemperature, ti
     const angleOffset = (Math.random() - 0.5) * spread;
     const xOffset = Math.sin(angleOffset) * 4;
     
+    // Apply KH ripple perpendicular to jet direction (horizontal for vertical jet)
+    const khOffset = khRipple * 0.4;  // 40% of ripple amplitude
+    
     jetParticles.push({
-      x: cx - helix.hx * radius + xOffset,
+      x: cx - helix.hx * radius + xOffset + khOffset,
       y: cy + radius - helix.hy * radius,
       speed: 6 + intensity * 10,
       life: 1,
@@ -882,8 +920,14 @@ export function drawMachDisks(ctx, cx, cy, sphereRadius, jetLength, jets, pressu
       // Random lateral offset within cone width
       const lateralOffset = (Math.random() - 0.5) * widthAtT;
 
-      // Calculate position
-      const x = cone.x + lateralOffset;
+      // Kelvin-Helmholtz ripple modulation at cone entry
+      // Cone starts at disk position (dNorm ≈ 0.55), ripples propagate downstream
+      const dNorm = 0.55 + t * 0.25;  // Approximate position in jet (0.55-0.8)
+      const khRipple = kelvinHelmholtzRipple(dNorm, time, jets, pressure);
+      const khModulation = khRipple * 0.3;  // 30% of ripple amplitude
+
+      // Calculate position with KH modulation
+      const x = cone.x + lateralOffset + khModulation;
       const y = cone.y + cone.dir * distance;
 
       // Eddy size: smaller near disk, larger downstream
