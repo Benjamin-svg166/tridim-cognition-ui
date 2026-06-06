@@ -22,6 +22,9 @@ let machTurbulence = [];
 // Turbulence cones (downstream chaos from Mach disks)
 let turbulenceCones = [];
 
+// Reconnection flares (sudden magnetic field starbursts along spine)
+let reconnectionFlares = [];
+
 /**
  * Calculate disk shadow factor for occlusion
  * @param {number} y - Y coordinate of particle/knot
@@ -773,6 +776,98 @@ export function updateJetTips(dt, jets, pressure, cx, cy, sphereRadius, jetLengt
 
   // Remove dead particles
   shockParticles = shockParticles.filter(s => s.life > 0);
+}
+
+/**
+ * Update and spawn magnetic reconnection flares along jet spine
+ * @param {number} dt - Delta time since last frame
+ * @param {number} cx - Center X coordinate
+ * @param {number} cy - Center Y coordinate
+ * @param {number} sphereRadius - Sphere radius
+ * @param {number} jetLength - Length of jets
+ * @param {number} jets - Jet intensity (0.0-1.0)
+ * @param {number} pressure - Magnetic pressure (0.0-1.0)
+ * @param {number} time - Animation time
+ */
+export function updateReconnectionFlares(dt, cx, cy, sphereRadius, jetLength, jets, pressure, time) {
+  // Flares only occur in high-stress spine conditions
+  const canFlare = pressure > 0.8 && jets > 0.6 && Math.random() < 0.015;  // ~0.9 flares/sec at 60fps
+
+  if (canFlare) {
+    // Get current jet direction offsets (precession + helix)
+    const prec = jetPrecession(time, jets);
+    const helix = jetHelix(time, jets);
+
+    // Spawn flares along both jets (top and bottom)
+    for (const dir of [-1, 1]) {
+      // Random position along spine (20-80% of jet length)
+      const dNorm = 0.2 + Math.random() * 0.6;
+      const flareDistance = dNorm * jetLength;
+
+      // Apply precession and helix to position
+      const precX = dir === -1 ? prec.x * sphereRadius : -prec.x * sphereRadius;
+      const precY = dir === -1 ? prec.y * sphereRadius : -prec.y * sphereRadius;
+      const helixX = dir === -1 ? helix.hx * sphereRadius : -helix.hx * sphereRadius;
+      const helixY = dir === -1 ? helix.hy * sphereRadius : -helix.hy * sphereRadius;
+
+      const flareX = cx + precX + helixX;
+      const flareY = cy + dir * (sphereRadius + flareDistance) + precY + helixY;
+
+      reconnectionFlares.push({
+        x: flareX,
+        y: flareY,
+        life: 1,
+        size: 4,
+        energy: 1.0,      // Starts ultra-hot (blue-white)
+        dNorm            // Position for spine brightening
+      });
+    }
+  }
+
+  // Update existing flares
+  for (const f of reconnectionFlares) {
+    f.life -= dt * 2.5;   // ~0.4s lifetime
+    f.size += dt * 40;    // Rapid expansion: 4px → 20px in 0.4s
+    f.energy -= dt * 1.5; // Fast cooling: 1.0 → 0 in 0.67s
+    f.energy = Math.max(0, f.energy);
+  }
+
+  // Remove dead flares
+  reconnectionFlares = reconnectionFlares.filter(f => f.life > 0);
+}
+
+/**
+ * Draw magnetic reconnection flares
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ */
+export function drawReconnectionFlares(ctx) {
+  if (reconnectionFlares.length === 0) return;
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+
+  for (const f of reconnectionFlares) {
+    // Synchrotron color based on energy (blue-white → white → yellow-orange)
+    const rgb = synchrotronColor(Math.max(0, f.energy));
+    const alpha = 0.35 * f.life;
+
+    // Draw expanding flare burst
+    ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Add bright core for extra punch when fresh
+    if (f.life > 0.7) {
+      const coreAlpha = 0.6 * f.life;
+      ctx.fillStyle = `rgba(${rgb}, ${coreAlpha})`;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, f.size * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  ctx.restore();
 }
 
 /**
