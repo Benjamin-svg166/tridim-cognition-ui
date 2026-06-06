@@ -189,50 +189,102 @@ export function drawPolarJets(ctx, cx, cy, radius, intensity, time, coreTemperat
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
 
+  // Spine-sheath structure: two-layer flow
+  const spineRadius = width * 0.45;   // Fast, bright inner core (45% of width)
+  const sheathRadius = width;          // Slower, diffuse outer envelope (100% of width)
+  const spineAlpha = alpha * 1.5;      // Brighter spine (1.5x base alpha)
+  const sheathAlpha = alpha * 0.5;     // Dimmer sheath (0.5x base alpha)
+
   // --- TOP JET ---
-  const gradTop = ctx.createLinearGradient(
+  // Synchrotron gradient: blue-white at base → white → orange at far end
+  const baseEnergy = 1.0;  // Maximum energy near star
+  const farEnergy = 0.3;   // Cooled energy at jet end
+  const midEnergy = 0.65;  // Medium energy at mid-jet
+
+  // SHEATH (outer envelope) - draw first (behind spine)
+  const gradTopSheath = ctx.createLinearGradient(
     topX, 
     cy - radius + topOffsetY, 
     topX, 
     cy - length + topOffsetY
   );
-  // Synchrotron gradient: blue-white at base → white → orange at far end
-  const baseEnergy = 1.0;  // Maximum energy near star
-  const farEnergy = 0.3;   // Cooled energy at jet end
-  const midEnergy = 0.65;  // Medium energy at mid-jet
-  
-  gradTop.addColorStop(0, `rgba(${synchrotronColor(baseEnergy)},${alpha})`);
-  gradTop.addColorStop(0.5, `rgba(${synchrotronColor(midEnergy)},${alpha * 0.8})`);
-  gradTop.addColorStop(1, `rgba(${synchrotronColor(farEnergy)},0)`);
+  gradTopSheath.addColorStop(0, `rgba(${synchrotronColor(baseEnergy)},${sheathAlpha})`);
+  gradTopSheath.addColorStop(0.5, `rgba(${synchrotronColor(midEnergy)},${sheathAlpha * 0.8})`);
+  gradTopSheath.addColorStop(1, `rgba(${synchrotronColor(farEnergy)},0)`);
 
-  ctx.fillStyle = gradTop;
+  ctx.fillStyle = gradTopSheath;
   ctx.beginPath();
   ctx.ellipse(
     topX, 
     topY, 
-    width * pulse * khWidthMod,  // Apply KH width modulation
+    sheathRadius * pulse * khWidthMod,  // Full width with modulation
+    length / 2, 
+    0, 0, Math.PI * 2
+  );
+  ctx.fill();
+
+  // SPINE (inner core) - draw on top
+  const gradTopSpine = ctx.createLinearGradient(
+    topX, 
+    cy - radius + topOffsetY, 
+    topX, 
+    cy - length + topOffsetY
+  );
+  gradTopSpine.addColorStop(0, `rgba(${synchrotronColor(baseEnergy)},${spineAlpha})`);
+  gradTopSpine.addColorStop(0.5, `rgba(${synchrotronColor(midEnergy)},${spineAlpha * 0.8})`);
+  gradTopSpine.addColorStop(1, `rgba(${synchrotronColor(farEnergy)},0)`);
+
+  ctx.fillStyle = gradTopSpine;
+  ctx.beginPath();
+  ctx.ellipse(
+    topX, 
+    topY, 
+    spineRadius * pulse * khWidthMod * 0.95,  // Spine slightly less affected by KH
     length / 2, 
     0, 0, Math.PI * 2
   );
   ctx.fill();
 
   // --- BOTTOM JET ---
-  const gradBot = ctx.createLinearGradient(
+  // SHEATH (outer envelope)
+  const gradBotSheath = ctx.createLinearGradient(
     botX, 
     cy + radius + botOffsetY, 
     botX, 
     cy + length + botOffsetY
   );
-  gradBot.addColorStop(0, `rgba(${synchrotronColor(baseEnergy)},${alpha})`);
-  gradBot.addColorStop(0.5, `rgba(${synchrotronColor(midEnergy)},${alpha * 0.8})`);
-  gradBot.addColorStop(1, `rgba(${synchrotronColor(farEnergy)},0)`);
+  gradBotSheath.addColorStop(0, `rgba(${synchrotronColor(baseEnergy)},${sheathAlpha})`);
+  gradBotSheath.addColorStop(0.5, `rgba(${synchrotronColor(midEnergy)},${sheathAlpha * 0.8})`);
+  gradBotSheath.addColorStop(1, `rgba(${synchrotronColor(farEnergy)},0)`);
 
-  ctx.fillStyle = gradBot;
+  ctx.fillStyle = gradBotSheath;
   ctx.beginPath();
   ctx.ellipse(
     botX, 
     botY, 
-    width * pulse * khWidthMod,  // Apply KH width modulation
+    sheathRadius * pulse * khWidthMod,  // Full width with modulation
+    length / 2, 
+    0, 0, Math.PI * 2
+  );
+  ctx.fill();
+
+  // SPINE (inner core)
+  const gradBotSpine = ctx.createLinearGradient(
+    botX, 
+    cy + radius + botOffsetY, 
+    botX, 
+    cy + length + botOffsetY
+  );
+  gradBotSpine.addColorStop(0, `rgba(${synchrotronColor(baseEnergy)},${spineAlpha})`);
+  gradBotSpine.addColorStop(0.5, `rgba(${synchrotronColor(midEnergy)},${spineAlpha * 0.8})`);
+  gradBotSpine.addColorStop(1, `rgba(${synchrotronColor(farEnergy)},0)`);
+
+  ctx.fillStyle = gradBotSpine;
+  ctx.beginPath();
+  ctx.ellipse(
+    botX, 
+    botY, 
+    spineRadius * pulse * khWidthMod * 0.95,  // Spine slightly less affected by KH
     length / 2, 
     0, 0, Math.PI * 2
   );
@@ -331,25 +383,35 @@ export function spawnJetParticles(cx, cy, radius, intensity, coreTemperature, ti
   // Kelvin-Helmholtz ripple at spawn position (dNorm=0, base of jet)
   const khRipple = kelvinHelmholtzRipple(0, time, intensity, pressure);
 
+  // Spine-sheath differentiation
+  const baseSpeed = 6 + intensity * 10;
+
   // TOP jet
   if (Math.random() < spawnRate) {
     const angleOffset = (Math.random() - 0.5) * spread;
     const xOffset = Math.sin(angleOffset) * 4;
     
+    // Spine-sheath tagging: 50% spine (inner fast core), 50% sheath (outer slow envelope)
+    const isSpine = Math.random() < 0.5;
+    const speedMultiplier = isSpine ? 1.3 : 0.7;  // Spine 30% faster, sheath 30% slower
+    
     // Apply KH ripple perpendicular to jet direction (horizontal for vertical jet)
-    const khOffset = khRipple * 0.4;  // 40% of ripple amplitude
+    // Sheath particles get stronger KH modulation (more turbulent)
+    const khStrength = isSpine ? 0.25 : 0.5;  // Spine: 25%, Sheath: 50%
+    const khOffset = khRipple * khStrength;
     
     jetParticles.push({
       x: cx + helix.hx * radius + xOffset + khOffset,
       y: cy - radius + helix.hy * radius,
-      speed: 6 + intensity * 10,   // Recommended: fast, energetic
+      speed: baseSpeed * speedMultiplier,
       life: 1,
       t: 0,                        // Track elapsed time for helix drift
       dir: -1,                     // upward
       coreTemperature,
       helixX: helix.hx * radius,   // Store initial helix offset for widening
       helixY: helix.hy * radius,
-      energy: 1.0                  // Spawn at maximum energy (near star)
+      energy: 1.0,                 // Spawn at maximum energy (near star)
+      isSpine                      // Tag as spine or sheath
     });
   }
 
@@ -358,20 +420,26 @@ export function spawnJetParticles(cx, cy, radius, intensity, coreTemperature, ti
     const angleOffset = (Math.random() - 0.5) * spread;
     const xOffset = Math.sin(angleOffset) * 4;
     
-    // Apply KH ripple perpendicular to jet direction (horizontal for vertical jet)
-    const khOffset = khRipple * 0.4;  // 40% of ripple amplitude
+    // Spine-sheath tagging
+    const isSpine = Math.random() < 0.5;
+    const speedMultiplier = isSpine ? 1.3 : 0.7;
+    
+    // Apply KH ripple (stronger for sheath)
+    const khStrength = isSpine ? 0.25 : 0.5;
+    const khOffset = khRipple * khStrength;
     
     jetParticles.push({
       x: cx - helix.hx * radius + xOffset + khOffset,
       y: cy + radius - helix.hy * radius,
-      speed: 6 + intensity * 10,
+      speed: baseSpeed * speedMultiplier,
       life: 1,
       t: 0,                        // Track elapsed time for helix drift
       dir: 1,                      // downward
       coreTemperature,
       helixX: -helix.hx * radius,  // Store initial helix offset for widening
       helixY: -helix.hy * radius,
-      energy: 1.0                  // Spawn at maximum energy (near star)
+      energy: 1.0,                 // Spawn at maximum energy (near star)
+      isSpine                      // Tag as spine or sheath
     });
   }
 }
@@ -426,7 +494,10 @@ export function updateJetParticles(ctx, dt, time, intensity, centerY, sphereRadi
     const diskYTop = centerY - diskHalfThickness;
     const diskYBottom = centerY + diskHalfThickness;
     const shadow = diskShadowFactor(p.y, diskYTop, diskYBottom, shadowStrength);
-    const alpha = p.life * shadow;
+    
+    // Spine-sheath brightness differentiation
+    const brightnessBoost = p.isSpine ? 1.4 : 0.7;  // Spine brighter, sheath dimmer
+    const alpha = p.life * shadow * brightnessBoost;
 
     ctx.fillStyle = `rgba(${rgb},${alpha})`;
     ctx.beginPath();
@@ -527,19 +598,27 @@ export function spawnJetKnots(cx, cy, radius, intensity, time, coreTemperature =
   const pressure = magneticPressure(intensity, coreTemperature);
   const knotSpread = (1 - pressure) * 8; // high pressure → narrow channel
 
+  // Base speed for knots
+  const baseSpeed = 3 + intensity * 6;
+
   // Top jet knots
   if (Math.random() < 0.1 * intensity) {
     const kx = (Math.random() - 0.5) * knotSpread;
+    
+    // Spine-sheath tagging for knots
+    const isSpine = Math.random() < 0.5;
+    const speedMultiplier = isSpine ? 1.3 : 0.7;  // Spine faster, sheath slower
     
     jetKnots.push({
       x: cx + helix.hx * radius + kx,
       y: cy - radius + helix.hy * radius,
       dir: -1,
       t: 0,
-      speed: 3 + intensity * 6,
+      speed: baseSpeed * speedMultiplier,
       helixX: helix.hx * radius,   // Store initial helix offset for widening
       helixY: helix.hy * radius,
-      energy: 1.0                  // Spawn at maximum energy
+      energy: 1.0,                 // Spawn at maximum energy
+      isSpine                      // Tag as spine or sheath
     });
   }
   
@@ -547,15 +626,20 @@ export function spawnJetKnots(cx, cy, radius, intensity, time, coreTemperature =
   if (Math.random() < 0.1 * intensity) {
     const kx = (Math.random() - 0.5) * knotSpread;
     
+    // Spine-sheath tagging for knots
+    const isSpine = Math.random() < 0.5;
+    const speedMultiplier = isSpine ? 1.3 : 0.7;
+    
     jetKnots.push({
       x: cx - helix.hx * radius + kx,
       y: cy + radius - helix.hy * radius,
       dir: 1,
       t: 0,
-      speed: 3 + intensity * 6,
+      speed: baseSpeed * speedMultiplier,
       helixX: -helix.hx * radius,  // Store initial helix offset for widening
       helixY: -helix.hy * radius,
-      energy: 1.0                  // Spawn at maximum energy
+      energy: 1.0,                 // Spawn at maximum energy
+      isSpine                      // Tag as spine or sheath
     });
   }
 }
@@ -598,7 +682,10 @@ export function updateJetKnots(ctx, dt, centerY, sphereRadius, shadowStrength = 
     const diskYTop = centerY - diskHalfThickness;
     const diskYBottom = centerY + diskHalfThickness;
     const shadow = diskShadowFactor(k.y, diskYTop, diskYBottom, shadowStrength);
-    const alpha = life * shadow;
+    
+    // Spine-sheath brightness differentiation for knots
+    const brightnessBoost = k.isSpine ? 1.4 : 0.7;  // Spine brighter, sheath dimmer
+    const alpha = life * shadow * brightnessBoost;
 
     ctx.fillStyle = `rgba(${rgb},${alpha})`;
     ctx.beginPath();
