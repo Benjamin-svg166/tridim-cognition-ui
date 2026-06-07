@@ -461,11 +461,20 @@ const NineDChessGame3D = () => {
     const inCheckmate = inCheck && isCheckmate(piecesRef.current, nextPlayer);
     const inStalemate = !inCheck && isStalemate(piecesRef.current, nextPlayer);
 
+    console.log('♟️ Turn ending:', { 
+      currentPlayer: toMove, 
+      nextPlayer, 
+      inCheck, 
+      inCheckmate, 
+      inStalemate 
+    });
+
     if (inCheckmate) {
       setGameStatus(`Checkmate! ${toMove} wins!`);
     } else if (inStalemate) {
       setGameStatus('Stalemate! Draw.');
     } else if (inCheck) {
+      console.log(`⚠️ ${nextPlayer} is in check!`);
       setGameStatus(`${nextPlayer} is in check!`);
     } else {
       setGameStatus(null);
