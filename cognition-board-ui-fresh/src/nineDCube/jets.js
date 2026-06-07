@@ -25,6 +25,9 @@ let turbulenceCones = [];
 // Reconnection flares (sudden magnetic field starbursts along spine)
 let reconnectionFlares = [];
 
+// Mixing layer particles (boundary turbulence between spine and sheath)
+let mixingParticles = [];
+
 /**
  * Calculate disk shadow factor for occlusion
  * @param {number} y - Y coordinate of particle/knot
@@ -508,6 +511,9 @@ export function updateJetParticles(ctx, dt, time, intensity, centerY, sphereRadi
     ctx.fill();
   }
 
+  // Apply spine-sheath diffusion (entrainment: particles swap layers)
+  applySpineSheathDiffusion(dt);
+
   // Cleanup
   for (let i = jetParticles.length - 1; i >= 0; i--) {
     if (jetParticles[i].life <= 0) {
@@ -834,6 +840,150 @@ export function updateReconnectionFlares(dt, cx, cy, sphereRadius, jetLength, je
 
   // Remove dead flares
   reconnectionFlares = reconnectionFlares.filter(f => f.life > 0);
+}
+
+/**
+ * Spawn mixing layer particles at spine-sheath boundary
+ * @param {number} cx - Center X coordinate
+ * @param {number} cy - Center Y coordinate
+ * @param {number} sphereRadius - Sphere radius
+ * @param {number} jetLength - Length of jets
+ * @param {number} jets - Jet intensity (0.0-1.0)
+ * @param {number} pressure - Magnetic pressure (0.0-1.0)
+ * @param {number} time - Animation time
+ */
+export function spawnMixingParticles(cx, cy, sphereRadius, jetLength, jets, pressure, time) {
+  if (jets < 0.1) return;
+
+  // Spawn rate scales with pressure (more mixing when jet is stressed)
+  const spawnRate = 0.02 + pressure * 0.08;  // 0.02-0.10 per frame
+  if (Math.random() > spawnRate) return;
+
+  // Get current jet direction offsets (precession + helix)
+  const prec = jetPrecession(time, jets);
+  const helix = jetHelix(time, jets);
+
+  // Spine-sheath structure dimensions
+  const baseWidth = sphereRadius * 0.22;
+  const width = baseWidth * (1 - pressure * 0.6);
+  const spineRadius = width * 0.45;
+
+  // Mixing layer thickness (thin shell around spine radius)
+  const mixInner = spineRadius * 0.95;   // 95% of spine radius
+  const mixOuter = spineRadius * 1.25;   // 125% of spine radius
+
+  // Spawn along both jets (top and bottom)
+  for (const dir of [-1, 1]) {
+    // Random position along jet (0-100% of jet length)
+    const dNorm = Math.random();
+    const distance = dNorm * jetLength;
+
+    // Apply precession and helix to position
+    const precX = dir === -1 ? prec.x * sphereRadius : -prec.x * sphereRadius;
+    const precY = dir === -1 ? prec.y * sphereRadius : -prec.y * sphereRadius;
+    const helixX = dir === -1 ? helix.hx * sphereRadius : -helix.hx * sphereRadius;
+    const helixY = dir === -1 ? helix.hy * sphereRadius : -helix.hy * sphereRadius;
+
+    // Random radial position in mixing layer
+    const radius = mixInner + Math.random() * (mixOuter - mixInner);
+    const angle = Math.random() * Math.PI * 2;
+
+    // Position in cylindrical coordinates around jet axis
+    const lateralX = Math.cos(angle) * radius;
+    const lateralY = Math.sin(angle) * radius * 0.3;  // Compressed perpendicular to jet
+
+    const particleX = cx + precX + helixX + lateralX;
+    const particleY = cy + dir * (sphereRadius + distance) + precY + helixY + lateralY;
+
+    // Energy based on distance from star (same as jet particles)
+    const energy = 1 - (distance / jetLength) * 0.7;
+
+    mixingParticles.push({
+      x: particleX,
+      y: particleY,
+      size: 1.5,
+      life: 1,
+      energy,
+      dir,
+      dNorm,
+      time: time  // Store spawn time for KH ripple phase
+    });
+  }
+}
+
+/**
+ * Update mixing layer particles with drift, growth, and fading
+ * @param {number} dt - Delta time since last frame
+ * @param {number} time - Current animation time
+ * @param {number} jets - Jet intensity (0.0-1.0)
+ * @param {number} pressure - Magnetic pressure (0.0-1.0)
+ */
+export function updateMixingParticles(dt, time, jets, pressure) {
+  for (const m of mixingParticles) {
+    // Drift outward and fade
+    m.life -= dt * 1.4;        // ~0.7s lifetime
+    m.size += dt * 3;          // Grows: 1.5px → 4px
+    m.energy -= dt * 0.3;      // Synchrotron cooling
+    m.energy = Math.max(0, m.energy);
+
+    // KH ripple modulation for shimmer effect
+    const ripple = kelvinHelmholtzRipple(m.dNorm, time, jets, pressure);
+    
+    // Normal vector pointing outward from jet axis (radially)
+    // For simplicity, use horizontal offset (perpendicular to vertical jet)
+    m.x += ripple * 0.2;
+
+    // Random lateral drift (filamentary turbulence)
+    m.x += (Math.random() - 0.5) * 0.4;
+    m.y += (Math.random() - 0.5) * 0.4;
+  }
+
+  // Remove dead particles
+  mixingParticles = mixingParticles.filter(m => m.life > 0);
+}
+
+/**
+ * Draw mixing layer particles with synchrotron colors
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ */
+export function drawMixingParticles(ctx) {
+  if (mixingParticles.length === 0) return;
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+
+  for (const m of mixingParticles) {
+    // Synchrotron color based on energy (white → yellow → orange cooling)
+    const rgb = synchrotronColor(Math.max(0, m.energy));
+    const alpha = 0.25 * m.life;  // Soft, turbulent glow
+
+    // Draw fuzzy mixing particle
+    ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(m.x, m.y, m.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+/**
+ * Apply spine-sheath diffusion (particle layer swapping)
+ * Called from updateJetParticles to simulate entrainment
+ * @param {number} dt - Delta time since last frame
+ */
+export function applySpineSheathDiffusion(dt) {
+  for (const p of jetParticles) {
+    // Particles near the boundary can swap layers occasionally
+    if (Math.random() < 0.002) {  // ~0.12 swaps per second per particle
+      p.isSpine = !p.isSpine;
+      
+      // Adjust speed to match new layer
+      const baseSpeed = 6 + 10 * 0.5;  // Approximate average
+      const speedMultiplier = p.isSpine ? 1.3 : 0.7;
+      p.speed = baseSpeed * speedMultiplier;
+    }
+  }
 }
 
 /**

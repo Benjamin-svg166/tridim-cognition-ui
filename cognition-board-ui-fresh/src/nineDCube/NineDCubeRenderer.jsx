@@ -9,7 +9,7 @@ import { granulationIntensity } from './granulation.js';
 import { drawMagneticArcs } from './magneticArcs.js';
 import { whiteDwarfCooling } from './coolingCurve.js';
 import { starspotPenumbra, starspotLatitudeBias, starspotLifecycle, flareFromSpots, polarSpotBias, drawStarspots } from './starspots.js';
-import { jetIntensity, magneticPressure, drawPolarJets, drawJetGlow, spawnJetParticles, updateJetParticles, drawAccretionDisk, relativisticBeaming, spawnJetKnots, updateJetKnots, updateJetTips, drawJetTips, machDiskStrength, updateMachDisks, drawMachDisks, updateReconnectionFlares, drawReconnectionFlares, jetPrecession } from './jets.js';
+import { jetIntensity, magneticPressure, drawPolarJets, drawJetGlow, spawnJetParticles, updateJetParticles, drawAccretionDisk, relativisticBeaming, spawnJetKnots, updateJetKnots, updateJetTips, drawJetTips, machDiskStrength, updateMachDisks, drawMachDisks, updateReconnectionFlares, drawReconnectionFlares, spawnMixingParticles, updateMixingParticles, drawMixingParticles, jetPrecession } from './jets.js';
 
 const NODE_RADIUS = 3;
 const HIGHLIGHT_RADIUS = 5;
@@ -820,6 +820,11 @@ const NineDCubeRenderer = ({
         // Update and draw magnetic reconnection flares (sudden starbursts along spine)
         updateReconnectionFlares(dt, centerX, centerY, sphereRadius, jetLength, jets, pressure, time);
         drawReconnectionFlares(ctx);
+        
+        // Spawn, update, and draw mixing layer particles (spine-sheath boundary turbulence)
+        spawnMixingParticles(centerX, centerY, sphereRadius, jetLength, jets, pressure, time);
+        updateMixingParticles(dt, time, jets, pressure);
+        drawMixingParticles(ctx);
       }
       
       // Optional: Draw edges with spherical projection (subtle, for structure)
