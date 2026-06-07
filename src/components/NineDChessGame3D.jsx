@@ -510,19 +510,29 @@ const NineDChessGame3D = () => {
   // AI move
   useEffect(() => {
     if (gameMode === 'pvc' && toMove === computerColor && !gameStatus?.includes('mate') && !promotionPending) {
+      console.log('🤖 AI turn detected:', { toMove, computerColor, gameMode, difficulty, useAdvancedAI });
       setAiThinking(true);
       const timer = setTimeout(() => {
         makeComputerMove();
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [toMove, gameMode, computerColor, gameStatus, promotionPending]);
+  }, [toMove, gameMode, computerColor, gameStatus, promotionPending, makeComputerMove]);
 
-  const makeComputerMove = async () => {
+  const makeComputerMove = useCallback(async () => {
     try {
+      console.log('🤖 makeComputerMove called:', { 
+        useAdvancedAI, 
+        difficulty, 
+        computerColor,
+        pieceCount: piecesRef.current.size 
+      });
+      
       const move = useAdvancedAI && (difficulty === 'hard' || difficulty === 'master')
         ? await selectBestMoveAdvanced(piecesRef.current, computerColor, difficulty)
         : selectBestMove(piecesRef.current, computerColor, difficulty);
+
+      console.log('🤖 AI calculated move:', move);
 
       if (move) {
         if (move.piece === 'pawn' && canPromote(move.to, computerColor)) {
@@ -530,13 +540,15 @@ const NineDChessGame3D = () => {
         } else {
           executeMove(move.from, move.to);
         }
+      } else {
+        console.error('❌ AI returned no move!');
       }
     } catch (error) {
       console.error('Error in makeComputerMove:', error);
     } finally {
       setAiThinking(false);
     }
-  };
+  }, [useAdvancedAI, difficulty, computerColor, executeMove]);
 
   // Promotion handler
   const handlePromotion = (pieceType) => {
