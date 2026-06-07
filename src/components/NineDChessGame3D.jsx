@@ -455,14 +455,15 @@ const NineDChessGame3D = () => {
     calculateMaterial();
     evaluateCurrentPosition();
 
-    // Check game status
-    const nextPlayer = toMove === 'white' ? 'black' : 'white';
+    // Check game status - use ref to avoid dependency
+    const currentPlayer = toMoveRef.current;
+    const nextPlayer = currentPlayer === 'white' ? 'black' : 'white';
     const inCheck = isInCheck(piecesRef.current, nextPlayer);
     const inCheckmate = inCheck && isCheckmate(piecesRef.current, nextPlayer);
     const inStalemate = !inCheck && isStalemate(piecesRef.current, nextPlayer);
 
     console.log('♟️ Turn ending:', { 
-      currentPlayer: toMove, 
+      currentPlayer, 
       nextPlayer, 
       inCheck, 
       inCheckmate, 
@@ -470,7 +471,7 @@ const NineDChessGame3D = () => {
     });
 
     if (inCheckmate) {
-      setGameStatus(`Checkmate! ${toMove} wins!`);
+      setGameStatus(`Checkmate! ${currentPlayer} wins!`);
     } else if (inStalemate) {
       setGameStatus('Stalemate! Draw.');
     } else if (inCheck) {
@@ -486,7 +487,7 @@ const NineDChessGame3D = () => {
     setVersion(v => v + 1);
     moveStartTimeRef.current = Date.now();
     setDrawOfferedBy(null); // Clear any pending draw offers after a move
-  }, [toMove, calculateMaterial, evaluateCurrentPosition]);
+  }, [calculateMaterial, evaluateCurrentPosition]);
 
   // Format move notation
   const formatMove = (from, to, piece, captured, promoteTo) => {
