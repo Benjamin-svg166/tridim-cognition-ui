@@ -408,7 +408,7 @@ const NineDChessGame3D = () => {
   };
 
   // Execute a move
-  const executeMove = (from, to, promoteTo = null) => {
+  const executeMove = useCallback((from, to, promoteTo = null) => {
     const fromKey = `${from.x},${from.y},${from.z}`;
     const toKey = `${to.x},${to.y},${to.z}`;
     const piece = piecesRef.current.get(fromKey);
@@ -486,7 +486,7 @@ const NineDChessGame3D = () => {
     setVersion(v => v + 1);
     moveStartTimeRef.current = Date.now();
     setDrawOfferedBy(null); // Clear any pending draw offers after a move
-  };
+  }, [toMove, calculateMaterial, evaluateCurrentPosition]);
 
   // Format move notation
   const formatMove = (from, to, piece, captured, promoteTo) => {
