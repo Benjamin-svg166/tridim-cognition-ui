@@ -733,7 +733,24 @@ const NineDChessGame3D = () => {
     <div style={{ display: 'flex', height: '100vh', background: '#1a1a1a' }}>
       {/* 3D Canvas */}
       <div style={{ flex: 1, position: 'relative' }}>
-        <Canvas camera={{ position: [12, 15, 12], fov: 50 }}>
+        <Canvas 
+          camera={{ position: [12, 15, 12], fov: 50 }}
+          gl={{ 
+            powerPreference: 'high-performance',
+            antialias: false,
+            stencil: false,
+            depth: true
+          }}
+          onCreated={({ gl }) => {
+            gl.domElement.addEventListener('webglcontextlost', (e) => {
+              console.error('⚠️ WebGL context lost - preventing default to attempt recovery');
+              e.preventDefault();
+            });
+            gl.domElement.addEventListener('webglcontextrestored', () => {
+              console.log('✅ WebGL context restored');
+            });
+          }}
+        >
           <ambientLight intensity={0.6} />
           <pointLight position={[10, 20, 10]} intensity={0.8} />
           <pointLight position={[-10, 10, -10]} intensity={0.4} />
