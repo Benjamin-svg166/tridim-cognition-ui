@@ -507,18 +507,6 @@ const NineDChessGame3D = () => {
     }
   }, [drawOfferedBy, gameMode, computerColor, gameStatus]);
 
-  // AI move
-  useEffect(() => {
-    if (gameMode === 'pvc' && toMove === computerColor && !gameStatus?.includes('mate') && !promotionPending) {
-      console.log('🤖 AI turn detected:', { toMove, computerColor, gameMode, difficulty, useAdvancedAI });
-      setAiThinking(true);
-      const timer = setTimeout(() => {
-        makeComputerMove();
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [toMove, gameMode, computerColor, gameStatus, promotionPending, makeComputerMove]);
-
   const makeComputerMove = useCallback(async () => {
     try {
       console.log('🤖 makeComputerMove called:', { 
@@ -549,6 +537,18 @@ const NineDChessGame3D = () => {
       setAiThinking(false);
     }
   }, [useAdvancedAI, difficulty, computerColor, executeMove]);
+
+  // AI move - must be AFTER makeComputerMove definition
+  useEffect(() => {
+    if (gameMode === 'pvc' && toMove === computerColor && !gameStatus?.includes('mate') && !promotionPending) {
+      console.log('🤖 AI turn detected:', { toMove, computerColor, gameMode, difficulty, useAdvancedAI });
+      setAiThinking(true);
+      const timer = setTimeout(() => {
+        makeComputerMove();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [toMove, gameMode, computerColor, gameStatus, promotionPending, makeComputerMove]);
 
   // Promotion handler
   const handlePromotion = (pieceType) => {
