@@ -403,8 +403,11 @@ const NineDCubeRenderer = ({
         const prec = jetPrecession(time, jets, diskWarp);
         const tiltX = prec.x;
         const tiltY = prec.y;
-        const beamBoost = relativisticBeaming(tiltX, tiltY);
-        const beamedIntensity = Math.min(1, jets * beamBoost);
+        // Average beaming from both jets for overall glow effect
+        const topBeaming = relativisticBeaming(-1, tiltX, tiltY);
+        const botBeaming = relativisticBeaming(1, tiltX, tiltY);
+        const avgBeamFactor = (topBeaming.beamingFactor + botBeaming.beamingFactor) / 2;
+        const beamedIntensity = Math.min(1, jets * (0.5 + avgBeamFactor * 0.5));
         
         // Draw jet glow and beams with precession + relativistic beaming + magnetic collimation
         drawJetGlow(ctx, centerX, centerY, sphereRadius, beamedIntensity);
