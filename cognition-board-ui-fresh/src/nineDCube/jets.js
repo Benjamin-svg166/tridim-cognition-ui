@@ -201,8 +201,19 @@ export function drawPolarJets(ctx, cx, cy, radius, intensity, time, coreTemperat
   // Spine-sheath structure: two-layer flow
   const spineRadius = width * 0.45;   // Fast, bright inner core (45% of width)
   const sheathRadius = width;          // Slower, diffuse outer envelope (100% of width)
-  const spineAlpha = alpha * 1.5;      // Brighter spine (1.5x base alpha)
-  const sheathAlpha = alpha * 0.5;     // Dimmer sheath (0.5x base alpha)
+  
+  // Relativistic beaming: jets brighten when pointing toward observer
+  const topBeaming = relativisticBeaming(-1, prec.x, prec.y);
+  const botBeaming = relativisticBeaming(1, prec.x, prec.y);
+  
+  const baseSpineAlpha = alpha * 1.5;      // Base spine brightness (1.5x)
+  const baseSheathAlpha = alpha * 0.5;     // Base sheath brightness (0.5x)
+  
+  // Apply beaming boosts (spine responds more than sheath)
+  const topSpineAlpha = baseSpineAlpha * topBeaming.spineBoost;
+  const topSheathAlpha = baseSheathAlpha * topBeaming.sheathBoost;
+  const botSpineAlpha = baseSpineAlpha * botBeaming.spineBoost;
+  const botSheathAlpha = baseSheathAlpha * botBeaming.sheathBoost;
 
   // --- TOP JET ---
   // Synchrotron gradient: blue-white at base → white → orange at far end
@@ -217,8 +228,8 @@ export function drawPolarJets(ctx, cx, cy, radius, intensity, time, coreTemperat
     topX, 
     cy - length + topOffsetY
   );
-  gradTopSheath.addColorStop(0, `rgba(${synchrotronColor(baseEnergy)},${sheathAlpha})`);
-  gradTopSheath.addColorStop(0.5, `rgba(${synchrotronColor(midEnergy)},${sheathAlpha * 0.8})`);
+  gradTopSheath.addColorStop(0, `rgba(${synchrotronColor(baseEnergy)},${topSheathAlpha})`);
+  gradTopSheath.addColorStop(0.5, `rgba(${synchrotronColor(midEnergy)},${topSheathAlpha * 0.8})`);
   gradTopSheath.addColorStop(1, `rgba(${synchrotronColor(farEnergy)},0)`);
 
   ctx.fillStyle = gradTopSheath;
@@ -239,8 +250,8 @@ export function drawPolarJets(ctx, cx, cy, radius, intensity, time, coreTemperat
     topX, 
     cy - length + topOffsetY
   );
-  gradTopSpine.addColorStop(0, `rgba(${synchrotronColor(baseEnergy)},${spineAlpha})`);
-  gradTopSpine.addColorStop(0.5, `rgba(${synchrotronColor(midEnergy)},${spineAlpha * 0.8})`);
+  gradTopSpine.addColorStop(0, `rgba(${synchrotronColor(baseEnergy)},${topSpineAlpha})`);
+  gradTopSpine.addColorStop(0.5, `rgba(${synchrotronColor(midEnergy)},${topSpineAlpha * 0.8})`);
   gradTopSpine.addColorStop(1, `rgba(${synchrotronColor(farEnergy)},0)`);
 
   ctx.fillStyle = gradTopSpine;
@@ -262,8 +273,8 @@ export function drawPolarJets(ctx, cx, cy, radius, intensity, time, coreTemperat
     botX, 
     cy + length + botOffsetY
   );
-  gradBotSheath.addColorStop(0, `rgba(${synchrotronColor(baseEnergy)},${sheathAlpha})`);
-  gradBotSheath.addColorStop(0.5, `rgba(${synchrotronColor(midEnergy)},${sheathAlpha * 0.8})`);
+  gradBotSheath.addColorStop(0, `rgba(${synchrotronColor(baseEnergy)},${botSheathAlpha})`);
+  gradBotSheath.addColorStop(0.5, `rgba(${synchrotronColor(midEnergy)},${botSheathAlpha * 0.8})`);
   gradBotSheath.addColorStop(1, `rgba(${synchrotronColor(farEnergy)},0)`);
 
   ctx.fillStyle = gradBotSheath;
@@ -284,8 +295,8 @@ export function drawPolarJets(ctx, cx, cy, radius, intensity, time, coreTemperat
     botX, 
     cy + length + botOffsetY
   );
-  gradBotSpine.addColorStop(0, `rgba(${synchrotronColor(baseEnergy)},${spineAlpha})`);
-  gradBotSpine.addColorStop(0.5, `rgba(${synchrotronColor(midEnergy)},${spineAlpha * 0.8})`);
+  gradBotSpine.addColorStop(0, `rgba(${synchrotronColor(baseEnergy)},${botSpineAlpha})`);
+  gradBotSpine.addColorStop(0.5, `rgba(${synchrotronColor(midEnergy)},${botSpineAlpha * 0.8})`);
   gradBotSpine.addColorStop(1, `rgba(${synchrotronColor(farEnergy)},0)`);
 
   ctx.fillStyle = gradBotSpine;
@@ -472,6 +483,9 @@ export function updateJetParticles(ctx, dt, time, intensity, centerY, sphereRadi
     console.log('💨 Jet Particles:', jetParticles.length, 'intensity:', intensity.toFixed(2));
   }
   
+  // Compute precession for beaming calculation
+  const prec = jetPrecession(time, intensity);
+  
   for (let p of jetParticles) {
     // Motion along jet axis
     p.y += p.speed * p.dir;
@@ -504,9 +518,13 @@ export function updateJetParticles(ctx, dt, time, intensity, centerY, sphereRadi
     const diskYBottom = centerY + diskHalfThickness;
     const shadow = diskShadowFactor(p.y, diskYTop, diskYBottom, shadowStrength);
     
-    // Spine-sheath brightness differentiation
-    const brightnessBoost = p.isSpine ? 1.4 : 0.7;  // Spine brighter, sheath dimmer
-    const alpha = p.life * shadow * brightnessBoost;
+    // Relativistic beaming: particles brighten when jet points toward observer
+    const beaming = relativisticBeaming(p.dir, prec.x, prec.y);
+    const beamBoost = p.isSpine ? beaming.spineBoost : beaming.sheathBoost;
+    
+    // Spine-sheath brightness with beaming
+    const baseBrightness = p.isSpine ? 1.4 : 0.7;  // Base brightness (spine/sheath)
+    const alpha = p.life * shadow * baseBrightness * beamBoost;
 
     ctx.fillStyle = `rgba(${rgb},${alpha})`;
     ctx.beginPath();
@@ -587,11 +605,52 @@ export function drawAccretionDisk(ctx, cx, cy, radius, intensity, time) {
  * @param {number} tiltY - Y tilt from precession
  * @returns {number} Gamma boost factor (0.5-1.0)
  */
-export function relativisticBeaming(tiltX, tiltY) {
-  // View direction is (0, 0, -1); we approximate with Y tilt only
-  const align = 1 - Math.abs(tiltY); // 1 = aligned, 0 = sideways
-  const gammaBoost = 0.5 + align * 0.5; // 0.5–1.0
-  return gammaBoost;
+/**
+ * Calculate relativistic beaming factor based on viewing angle
+ * Jets appear brighter when pointing toward observer (Doppler beaming)
+ * @param {number} dir - Jet direction (-1 = upward, 1 = downward)
+ * @param {number} precX - Precession X offset (normalized)
+ * @param {number} precY - Precession Y offset (normalized)
+ * @returns {{beamingFactor: number, spineBoost: number, sheathBoost: number}} Beaming multipliers
+ */
+export function relativisticBeaming(dir, precX, precY) {
+  // Camera direction: viewer above screen looking down
+  const camDir = { x: 0, y: -1 };
+  
+  // Jet direction vector (base direction + precession offset)
+  const jetDir = {
+    x: precX,
+    y: dir + precY * dir  // dir is -1 (up) or 1 (down)
+  };
+  
+  // Normalize jet direction
+  const jetMag = Math.sqrt(jetDir.x * jetDir.x + jetDir.y * jetDir.y);
+  if (jetMag < 0.001) {
+    // Fallback for near-zero vector
+    return { beamingFactor: 1.0, spineBoost: 1.0, sheathBoost: 1.0 };
+  }
+  const jetDirNorm = { x: jetDir.x / jetMag, y: jetDir.y / jetMag };
+  
+  // Dot product: 1 = pointing at camera, -1 = pointing away
+  const dot = jetDirNorm.x * camDir.x + jetDirNorm.y * camDir.y;
+  
+  // Convert to viewing angle (0 = toward camera, π = away)
+  const angle = Math.acos(Math.max(-1, Math.min(1, dot)));
+  
+  // Normalize to 0–1 (1 = toward camera, 0 = away)
+  const viewNorm = 1 - angle / Math.PI;
+  
+  // Relativistic beaming: (1 + k·viewNorm)^γ
+  const baseGamma = 2.0;                          // Beaming sharpness
+  const beamingGain = 1 + viewNorm * 1.8;         // 1.0–2.8 range
+  const beaming = Math.pow(beamingGain, baseGamma); // ~1–8
+  const beamingFactor = Math.min(beaming, 6.0);   // Clamp to 6.0
+  
+  // Spine responds more strongly than sheath (relativistic core dominance)
+  const spineBoost = 0.6 + beamingFactor * 0.4;   // 0.6–3.0
+  const sheathBoost = 0.7 + beamingFactor * 0.2;  // 0.7–1.9
+  
+  return { beamingFactor, spineBoost, sheathBoost };
 }
 
 /**
@@ -828,7 +887,8 @@ export function updateReconnectionFlares(dt, cx, cy, sphereRadius, jetLength, je
         life: 1,
         size: 4,
         energy: 1.0,      // Starts ultra-hot (blue-white)
-        dNorm            // Position for spine brightening
+        dNorm,            // Position for spine brightening
+        dir               // Jet direction for beaming calculation
       });
     }
   }
@@ -1160,17 +1220,29 @@ export function drawAmbientParticles(ctx) {
 /**
  * Draw magnetic reconnection flares
  * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {number} time - Animation time for precession/beaming
+ * @param {number} jets - Jet intensity for precession calculation
  */
-export function drawReconnectionFlares(ctx) {
+export function drawReconnectionFlares(ctx, time, jets) {
   if (reconnectionFlares.length === 0) return;
+
+  // Compute precession for beaming
+  const prec = jetPrecession(time, jets);
+  const topBeaming = relativisticBeaming(-1, prec.x, prec.y);
+  const botBeaming = relativisticBeaming(1, prec.x, prec.y);
 
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
 
   for (const f of reconnectionFlares) {
+    // Apply beaming to flare (high-energy spine event)
+    const beaming = f.dir === -1 ? topBeaming : botBeaming;
+    const flareBeamBoost = 0.4 + beaming.beamingFactor * 0.6;  // 0.4–4.0
+    
     // Synchrotron color based on energy (blue-white → white → yellow-orange)
     const rgb = synchrotronColor(Math.max(0, f.energy));
-    const alpha = 0.35 * f.life;
+    const baseAlpha = 0.35 * f.life;
+    const alpha = baseAlpha * flareBeamBoost;
 
     // Draw expanding flare burst
     ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
@@ -1180,7 +1252,8 @@ export function drawReconnectionFlares(ctx) {
 
     // Add bright core for extra punch when fresh
     if (f.life > 0.7) {
-      const coreAlpha = 0.6 * f.life;
+      const baseCoreAlpha = 0.6 * f.life;
+      const coreAlpha = baseCoreAlpha * flareBeamBoost;
       ctx.fillStyle = `rgba(${rgb}, ${coreAlpha})`;
       ctx.beginPath();
       ctx.arc(f.x, f.y, f.size * 0.4, 0, Math.PI * 2);
@@ -1212,10 +1285,21 @@ export function drawJetTips(ctx, cx, cy, sphereRadius, jetLength, pressure, time
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
 
+  // Compute beaming for top and bottom jets
+  const topBeaming = relativisticBeaming(-1, prec.x, prec.y);
+  const botBeaming = relativisticBeaming(1, prec.x, prec.y);
+
   // Draw shock compression particles first (behind tips)
   for (const s of shockParticles) {
+    // Determine which jet this shock particle belongs to (based on y position)
+    const dir = s.y < cy ? -1 : 1;
+    const beaming = dir === -1 ? topBeaming : botBeaming;
+    
+    // High-energy shocks strongly beamed
+    const shockBoost = 0.5 + beaming.beamingFactor * 0.5;  // 0.5–3.5
+    
     const rgb = synchrotronColor(s.energy);
-    ctx.fillStyle = `rgba(${rgb}, ${0.25 * s.life})`;
+    ctx.fillStyle = `rgba(${rgb}, ${0.25 * s.life * shockBoost})`;
     ctx.beginPath();
     ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
     ctx.fill();
@@ -1242,9 +1326,8 @@ export function drawJetTips(ctx, cx, cy, sphereRadius, jetLength, pressure, time
     const y = cy + dir * (sphereRadius + distance) + precY + helixY;
 
     // Relativistic beaming: tips pointing toward camera are brighter
-    // Approximate view direction as (0, 0, -1), use Y component for alignment
-    const viewAlign = dir === 1 ? 0.7 : 0.3; // bottom jet is brighter (pointing "toward" us)
-    const beamBoost = 1 + viewAlign * 1.5; // 1.0-2.5 range
+    const beaming = dir === -1 ? topBeaming : botBeaming;
+    const beamBoost = 0.5 + beaming.beamingFactor * 0.5;  // 0.5–3.5
 
     // Tip size: larger when highly collimated
     const radius = 6 + pressure * 4; // 6-10px range
@@ -1405,6 +1488,10 @@ export function drawMachDisks(ctx, cx, cy, sphereRadius, jetLength, jets, pressu
   // Get current jet direction offsets (precession + helix)
   const prec = jetPrecession(time, jets);
   const helix = jetHelix(time, jets);
+  
+  // Compute beaming for top and bottom jets
+  const topBeaming = relativisticBeaming(-1, prec.x, prec.y);
+  const botBeaming = relativisticBeaming(1, prec.x, prec.y);
 
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
@@ -1413,6 +1500,10 @@ export function drawMachDisks(ctx, cx, cy, sphereRadius, jetLength, jets, pressu
   for (const cone of turbulenceCones) {
     const spawnCount = 3 + Math.floor(cone.strength * 4); // 3-7 eddies per cone per frame
     const lifeFactor = cone.life; // Cone fades as it ages
+    
+    // Apply beaming to cone (high-energy turbulence)
+    const beaming = cone.dir === -1 ? topBeaming : botBeaming;
+    const coneBeamBoost = 0.6 + beaming.beamingFactor * 0.4;  // 0.6–2.8
 
     for (let i = 0; i < spawnCount; i++) {
       // Random position inside cone
@@ -1442,8 +1533,8 @@ export function drawMachDisks(ctx, cx, cy, sphereRadius, jetLength, jets, pressu
       const eddyEnergy = diskEnergy * (1 - t * 0.5);  // Cool further downstream
       const rgb = synchrotronColor(eddyEnergy);
 
-      // Draw turbulence eddy with energy-based color
-      const alpha = 0.18 * lifeFactor * (1 - t * 0.3); // Fade slightly with distance
+      // Draw turbulence eddy with energy-based color and beaming
+      const alpha = 0.18 * lifeFactor * (1 - t * 0.3) * coneBeamBoost;
       ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
       ctx.beginPath();
       ctx.arc(x, y, size, 0, Math.PI * 2);
@@ -1453,8 +1544,13 @@ export function drawMachDisks(ctx, cx, cy, sphereRadius, jetLength, jets, pressu
 
   // Draw turbulence particles (behind disks)
   for (const p of machTurbulence) {
+    // Determine which jet this turbulence belongs to
+    const dir = p.y < cy ? -1 : 1;
+    const beaming = dir === -1 ? topBeaming : botBeaming;
+    const turbBeamBoost = 0.6 + beaming.beamingFactor * 0.4;
+    
     const rgb = synchrotronColor(p.energy);
-    ctx.fillStyle = `rgba(${rgb}, ${0.2 * p.life})`;
+    ctx.fillStyle = `rgba(${rgb}, ${0.2 * p.life * turbBeamBoost})`;
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
     ctx.fill();
@@ -1480,9 +1576,14 @@ export function drawMachDisks(ctx, cx, cy, sphereRadius, jetLength, jets, pressu
     // Disk size: larger when over-pressured
     const baseRadius = 12 + strength * 18; // 12-30px range
     const radius = baseRadius * pulse;
+    
+    // Apply beaming to disk (high-energy shock surface)
+    const beaming = dir === -1 ? topBeaming : botBeaming;
+    const diskBeamBoost = 0.5 + beaming.beamingFactor * 0.5;  // 0.5–3.5
 
-    // Disk brightness: increases with strength
-    const alpha = 0.25 + strength * 0.5; // 0.25-0.75 range
+    // Disk brightness: increases with strength and beaming
+    const baseAlpha = 0.25 + strength * 0.5; // 0.25-0.75 range
+    const alpha = baseAlpha * diskBeamBoost;
 
     // Mach disk energy: high-energy shock surface (blue-white)
     const diskEnergy = 1 - (diskDistance / jetLength) * 0.7;

@@ -819,7 +819,7 @@ const NineDCubeRenderer = ({
         
         // Update and draw magnetic reconnection flares (sudden starbursts along spine)
         updateReconnectionFlares(dt, centerX, centerY, sphereRadius, jetLength, jets, pressure, time);
-        drawReconnectionFlares(ctx);
+        drawReconnectionFlares(ctx, time, jets);
         
         // Spawn, update, and draw mixing layer particles (spine-sheath boundary turbulence)
         spawnMixingParticles(centerX, centerY, sphereRadius, jetLength, jets, pressure, time);
