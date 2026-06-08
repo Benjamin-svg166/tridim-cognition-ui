@@ -28,6 +28,9 @@ let reconnectionFlares = [];
 // Mixing layer particles (boundary turbulence between spine and sheath)
 let mixingParticles = [];
 
+// Ambient medium particles (external environment around jets)
+let ambientParticles = [];
+
 /**
  * Calculate disk shadow factor for occlusion
  * @param {number} y - Y coordinate of particle/knot
@@ -984,6 +987,174 @@ export function applySpineSheathDiffusion(dt) {
       p.speed = baseSpeed * speedMultiplier;
     }
   }
+}
+
+/**
+ * Spawn ambient medium particles (external environment around jets)
+ * @param {number} cx - Center X coordinate
+ * @param {number} cy - Center Y coordinate
+ * @param {number} sphereRadius - Sphere radius
+ * @param {number} canvasWidth - Canvas width
+ * @param {number} canvasHeight - Canvas height
+ */
+export function spawnAmbientParticles(cx, cy, sphereRadius, canvasWidth, canvasHeight) {
+  // Maintain a sparse field of ambient particles (target: ~50 particles)
+  if (ambientParticles.length < 50) {
+    // Spawn uniformly in a large radius around the star
+    const spawnRadius = sphereRadius * 6;  // Large spawn zone
+    const angle = Math.random() * Math.PI * 2;
+    const distance = Math.random() * spawnRadius;
+    
+    const px = cx + Math.cos(angle) * distance;
+    const py = cy + Math.sin(angle) * distance;
+    
+    // Only spawn if within canvas bounds
+    if (px > 0 && px < canvasWidth && py > 0 && py < canvasHeight) {
+      ambientParticles.push({
+        x: px,
+        y: py,
+        size: 1.0,
+        life: 1,
+        energy: 0.15,  // Low-energy ambient medium
+        vx: (Math.random() - 0.5) * 0.3,  // Slow drift
+        vy: (Math.random() - 0.5) * 0.3
+      });
+    }
+  }
+}
+
+/**
+ * Update ambient particles with jet entrainment effects
+ * @param {number} dt - Delta time since last frame
+ * @param {number} cx - Center X coordinate
+ * @param {number} cy - Center Y coordinate
+ * @param {number} sphereRadius - Sphere radius
+ * @param {number} jetLength - Length of jets
+ * @param {number} jets - Jet intensity (0.0-1.0)
+ * @param {number} pressure - Magnetic pressure (0.0-1.0)
+ * @param {number} time - Animation time
+ */
+export function updateAmbientParticles(dt, cx, cy, sphereRadius, jetLength, jets, pressure, time) {
+  if (jets < 0.1) {
+    // No entrainment when jets are weak - just ambient drift
+    for (const p of ambientParticles) {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= dt * 0.1;  // Slow fade
+    }
+    ambientParticles = ambientParticles.filter(p => p.life > 0);
+    return;
+  }
+
+  // Get current jet direction offsets (precession + helix)
+  const prec = jetPrecession(time, jets);
+  const helix = jetHelix(time, jets);
+
+  // Spine-sheath structure dimensions
+  const baseWidth = sphereRadius * 0.22;
+  const width = baseWidth * (1 - pressure * 0.6);
+  const sheathRadius = width;
+  const influenceRadius = sheathRadius * 1.8;  // Entrainment zone
+
+  // Process both jets (top and bottom)
+  for (const dir of [-1, 1]) {
+    // Apply precession and helix to jet axis position
+    const precX = dir === -1 ? prec.x * sphereRadius : -prec.x * sphereRadius;
+    const helixX = dir === -1 ? helix.hx * sphereRadius : -helix.hx * sphereRadius;
+    const jetAxisX = cx + precX + helixX;
+
+    for (const p of ambientParticles) {
+      // Check multiple points along jet axis for entrainment
+      for (let dNorm = 0; dNorm <= 1; dNorm += 0.2) {
+        const distance = dNorm * jetLength;
+        const precY = dir === -1 ? prec.y * sphereRadius : -prec.y * sphereRadius;
+        const helixY = dir === -1 ? helix.hy * sphereRadius : -helix.hy * sphereRadius;
+        const jetAxisY = cy + dir * (sphereRadius + distance) + precY + helixY;
+
+        // Distance from particle to this point on jet axis
+        const dx = p.x - jetAxisX;
+        const dy = p.y - jetAxisY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        // If within influence radius, apply inward pull
+        if (dist < influenceRadius && dist > 0.1) {
+          const pullStrength = (1 - dist / influenceRadius) * pressure * jets * 0.15;
+          
+          // Pull toward jet axis
+          const nx = -dx / dist;  // Normal pointing toward axis
+          const ny = -dy / dist;
+          
+          p.vx += nx * pullStrength;
+          p.vy += ny * pullStrength;
+
+          // Ambient turbulence near jet (swirling fog)
+          p.x += (Math.random() - 0.5) * 0.2;
+          p.y += (Math.random() - 0.5) * 0.2;
+
+          // If particle reaches sheath boundary, convert to sheath particle
+          if (dist < sheathRadius) {
+            // Add to jet particle system as sheath particle
+            jetParticles.push({
+              x: p.x,
+              y: p.y,
+              speed: (6 + jets * 10) * 0.7,  // Sheath speed
+              life: 1,
+              t: 0,
+              dir: dir,
+              coreTemperature: 1.0,
+              helixX: helixX,
+              helixY: helixY,
+              energy: 0.4,  // Low energy from ambient ingestion
+              isSpine: false  // Entrained into sheath
+            });
+            
+            // Mark ambient particle for removal
+            p.life = 0;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // Update ambient particle positions and life
+  for (const p of ambientParticles) {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life -= dt * 0.1;  // Slow fade
+    
+    // Damping (ambient friction)
+    p.vx *= 0.98;
+    p.vy *= 0.98;
+  }
+
+  // Remove dead particles
+  ambientParticles = ambientParticles.filter(p => p.life > 0);
+}
+
+/**
+ * Draw ambient medium particles with low-energy synchrotron colors
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ */
+export function drawAmbientParticles(ctx) {
+  if (ambientParticles.length === 0) return;
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+
+  for (const p of ambientParticles) {
+    // Low-energy synchrotron color (faint orange/yellow fog)
+    const rgb = synchrotronColor(Math.max(0, p.energy));
+    const alpha = 0.12 * p.life;  // Very faint ambient glow
+
+    // Draw ambient fog particle
+    ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
 }
 
 /**

@@ -9,7 +9,7 @@ import { granulationIntensity } from './granulation.js';
 import { drawMagneticArcs } from './magneticArcs.js';
 import { whiteDwarfCooling } from './coolingCurve.js';
 import { starspotPenumbra, starspotLatitudeBias, starspotLifecycle, flareFromSpots, polarSpotBias, drawStarspots } from './starspots.js';
-import { jetIntensity, magneticPressure, drawPolarJets, drawJetGlow, spawnJetParticles, updateJetParticles, drawAccretionDisk, relativisticBeaming, spawnJetKnots, updateJetKnots, updateJetTips, drawJetTips, machDiskStrength, updateMachDisks, drawMachDisks, updateReconnectionFlares, drawReconnectionFlares, spawnMixingParticles, updateMixingParticles, drawMixingParticles, jetPrecession } from './jets.js';
+import { jetIntensity, magneticPressure, drawPolarJets, drawJetGlow, spawnJetParticles, updateJetParticles, drawAccretionDisk, relativisticBeaming, spawnJetKnots, updateJetKnots, updateJetTips, drawJetTips, machDiskStrength, updateMachDisks, drawMachDisks, updateReconnectionFlares, drawReconnectionFlares, spawnMixingParticles, updateMixingParticles, drawMixingParticles, spawnAmbientParticles, updateAmbientParticles, drawAmbientParticles, jetPrecession } from './jets.js';
 
 const NODE_RADIUS = 3;
 const HIGHLIGHT_RADIUS = 5;
@@ -825,6 +825,11 @@ const NineDCubeRenderer = ({
         spawnMixingParticles(centerX, centerY, sphereRadius, jetLength, jets, pressure, time);
         updateMixingParticles(dt, time, jets, pressure);
         drawMixingParticles(ctx);
+        
+        // Spawn, update, and draw ambient medium (external environment entrainment)
+        spawnAmbientParticles(centerX, centerY, sphereRadius, canvas.width, canvas.height);
+        updateAmbientParticles(dt, centerX, centerY, sphereRadius, jetLength, jets, pressure, time);
+        drawAmbientParticles(ctx);
       }
       
       // Optional: Draw edges with spherical projection (subtle, for structure)
