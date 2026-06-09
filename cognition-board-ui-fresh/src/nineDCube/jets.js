@@ -106,6 +106,72 @@ function synchrotronColor(energy) {
 }
 
 /**
+ * Multi-band emission functions
+ * Derive radio, optical, and X-ray emissivities from particle energy
+ * Each band has different cooling rates and beaming response
+ */
+
+/**
+ * Radio emission weight - strong at low-mid energy, long-lived
+ * @param {number} energy - Energy level (0.0-1.0)
+ * @returns {number} Radio emission weight (0.0-1.0)
+ */
+function radioEmission(energy) {
+  // Strong at low–mid energy, fades at very high
+  // Peak around 0.3–0.6
+  const t = Math.max(0, Math.min(1, (energy - 0.1) / 0.5));  // 0.1–0.6
+  return t * (1 - Math.max(0, energy - 0.7) * 1.5);          // suppress >0.7
+}
+
+/**
+ * Optical emission weight - strong at mid energy
+ * @param {number} energy - Energy level (0.0-1.0)
+ * @returns {number} Optical emission weight (0.0-1.0)
+ */
+function opticalEmission(energy) {
+  // Strong at mid energy, fades at extremes
+  const t = Math.max(0, Math.min(1, (energy - 0.25) / 0.4)); // 0.25–0.65
+  return t * (1 - Math.abs(energy - 0.5) * 1.4);
+}
+
+/**
+ * X-ray emission weight - only at very high energy, short-lived
+ * @param {number} energy - Energy level (0.0-1.0)
+ * @returns {number} X-ray emission weight (0.0-1.0)
+ */
+function xrayEmission(energy) {
+  // Only at very high energy, dies quickly
+  if (energy < 0.6) return 0;
+  const t = (energy - 0.6) / 0.4;  // 0–1 for energy 0.6–1.0
+  return t * t;  // Quadratic rise
+}
+
+/**
+ * Radio band color (violet-ish, low-energy radio visualization)
+ * @returns {string} RGB values as comma-separated string
+ */
+function radioColor() {
+  return '180, 120, 255';   // violet-ish
+}
+
+/**
+ * Optical band color (reuses synchrotron color mapping)
+ * @param {number} energy - Energy level (0.0-1.0)
+ * @returns {string} RGB values as comma-separated string
+ */
+function opticalColor(energy) {
+  return synchrotronColor(energy);
+}
+
+/**
+ * X-ray band color (cyan/blue-white for high-energy emission)
+ * @returns {string} RGB values as comma-separated string
+ */
+function xrayColor() {
+  return '180, 255, 255';   // cyan/blue-white
+}
+
+/**
  * Calculate Kelvin-Helmholtz shear ripple offset
  * KH instability creates wave-like distortions along jet edges due to velocity shear
  * @param {number} dNorm - Normalized distance along jet (0.0-1.0)
@@ -524,12 +590,48 @@ export function updateJetParticles(ctx, dt, time, intensity, centerY, sphereRadi
     
     // Spine-sheath brightness with beaming
     const baseBrightness = p.isSpine ? 1.4 : 0.7;  // Base brightness (spine/sheath)
-    const alpha = p.life * shadow * baseBrightness * beamBoost;
-
-    ctx.fillStyle = `rgba(${rgb},${alpha})`;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
-    ctx.fill();
+    const baseAlpha = p.life * shadow * baseBrightness;
+    
+    // Multi-band rendering: radio, optical, X-ray
+    const e = p.energy;
+    
+    // Band-specific beaming (X-ray responds most, radio least)
+    const radioBoost = 0.8 + beaming.beamingFactor * 0.1;
+    const opticalBoost = 0.7 + beaming.beamingFactor * 0.3;
+    const xrayBoost = 0.5 + beaming.beamingFactor * 0.5;
+    
+    // Radio emission (long-lived, low-mid energy, slightly larger)
+    const radioW = radioEmission(e);
+    if (radioW > 0.01) {
+      const rgb = radioColor();
+      const alpha = baseAlpha * radioW * 0.4 * radioBoost;
+      ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // Optical emission (mid energy, normal size)
+    const optW = opticalEmission(e);
+    if (optW > 0.01) {
+      const rgb = opticalColor(e);
+      const alpha = baseAlpha * optW * 0.7 * opticalBoost;
+      ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // X-ray emission (very high energy, compact, strongly beamed)
+    const xrayW = xrayEmission(e);
+    if (xrayW > 0.01) {
+      const rgb = xrayColor();
+      const alpha = baseAlpha * xrayW * 0.9 * xrayBoost;
+      ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   // Apply spine-sheath diffusion (entrainment: particles swap layers)
@@ -1016,15 +1118,43 @@ export function drawMixingParticles(ctx) {
   ctx.globalCompositeOperation = "lighter";
 
   for (const m of mixingParticles) {
-    // Synchrotron color based on energy (white → yellow → orange cooling)
-    const rgb = synchrotronColor(Math.max(0, m.energy));
-    const alpha = 0.25 * m.life;  // Soft, turbulent glow
-
-    // Draw fuzzy mixing particle
-    ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
-    ctx.beginPath();
-    ctx.arc(m.x, m.y, m.size, 0, Math.PI * 2);
-    ctx.fill();
+    const e = Math.max(0, m.energy);
+    const baseAlpha = 0.25 * m.life;  // Soft, turbulent glow
+    
+    // Multi-band rendering: mixing layer is radio-dominant with optical, minimal X-ray
+    
+    // Radio emission (strong in cooler mixing layer)
+    const radioW = radioEmission(e);
+    if (radioW > 0.01) {
+      const rgb = radioColor();
+      const alpha = baseAlpha * radioW * 0.6;  // Radio-dominant
+      ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, m.size * 1.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // Optical emission (moderate in mixing layer)
+    const optW = opticalEmission(e);
+    if (optW > 0.01) {
+      const rgb = opticalColor(e);
+      const alpha = baseAlpha * optW * 0.4;
+      ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, m.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // X-ray emission (minimal in cooler boundary layer)
+    const xrayW = xrayEmission(e);
+    if (xrayW > 0.01) {
+      const rgb = xrayColor();
+      const alpha = baseAlpha * xrayW * 0.2;  // Suppressed
+      ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, m.size * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   ctx.restore();
@@ -1203,15 +1333,34 @@ export function drawAmbientParticles(ctx) {
   ctx.globalCompositeOperation = "lighter";
 
   for (const p of ambientParticles) {
-    // Low-energy synchrotron color (faint orange/yellow fog)
-    const rgb = synchrotronColor(Math.max(0, p.energy));
-    const alpha = 0.12 * p.life;  // Very faint ambient glow
-
-    // Draw ambient fog particle
-    ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-    ctx.fill();
+    const e = Math.max(0, p.energy);
+    const baseAlpha = 0.12 * p.life;  // Very faint ambient glow
+    
+    // Multi-band rendering: ambient medium is radio-only (very low energy)
+    
+    // Radio emission (only significant band for cool ambient medium)
+    const radioW = radioEmission(e);
+    if (radioW > 0.01) {
+      const rgb = radioColor();
+      const alpha = baseAlpha * radioW * 0.7;  // Radio-dominant fog
+      ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * 1.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // Optical emission (very weak)
+    const optW = opticalEmission(e);
+    if (optW > 0.01) {
+      const rgb = opticalColor(e);
+      const alpha = baseAlpha * optW * 0.3;  // Suppressed
+      ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // No X-ray emission (too cool for X-ray)
   }
 
   ctx.restore();
@@ -1237,27 +1386,57 @@ export function drawReconnectionFlares(ctx, time, jets) {
   for (const f of reconnectionFlares) {
     // Apply beaming to flare (high-energy spine event)
     const beaming = f.dir === -1 ? topBeaming : botBeaming;
-    const flareBeamBoost = 0.4 + beaming.beamingFactor * 0.6;  // 0.4–4.0
     
-    // Synchrotron color based on energy (blue-white → white → yellow-orange)
-    const rgb = synchrotronColor(Math.max(0, f.energy));
+    // Band-specific beaming (X-ray most responsive)
+    const radioBoost = 0.8 + beaming.beamingFactor * 0.1;
+    const opticalBoost = 0.7 + beaming.beamingFactor * 0.3;
+    const xrayBoost = 0.4 + beaming.beamingFactor * 0.6;  // 0.4–4.0
+    
+    const e = Math.max(0, f.energy);
     const baseAlpha = 0.35 * f.life;
-    const alpha = baseAlpha * flareBeamBoost;
-
-    // Draw expanding flare burst
-    ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
-    ctx.beginPath();
-    ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Add bright core for extra punch when fresh
-    if (f.life > 0.7) {
-      const baseCoreAlpha = 0.6 * f.life;
-      const coreAlpha = baseCoreAlpha * flareBeamBoost;
-      ctx.fillStyle = `rgba(${rgb}, ${coreAlpha})`;
+    
+    // Multi-band flare rendering (strong X-ray at birth → optical → radio tail)
+    
+    // Radio afterglow (appears as flare cools)
+    const radioW = radioEmission(e);
+    if (radioW > 0.01) {
+      const rgb = radioColor();
+      const alpha = baseAlpha * radioW * 0.5 * radioBoost;
+      ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
       ctx.beginPath();
-      ctx.arc(f.x, f.y, f.size * 0.4, 0, Math.PI * 2);
+      ctx.arc(f.x, f.y, f.size * 1.2, 0, Math.PI * 2);
       ctx.fill();
+    }
+    
+    // Optical emission (mid-life flare)
+    const optW = opticalEmission(e);
+    if (optW > 0.01) {
+      const rgb = opticalColor(e);
+      const alpha = baseAlpha * optW * 0.7 * opticalBoost;
+      ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // X-ray burst (strongest at birth, dies quickly)
+    const xrayW = xrayEmission(e);
+    if (xrayW > 0.01) {
+      const rgb = xrayColor();
+      const alpha = baseAlpha * xrayW * 0.9 * xrayBoost;
+      ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, f.size * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Bright X-ray core for extra punch when fresh
+      if (f.life > 0.7) {
+        const coreAlpha = 0.6 * f.life * xrayBoost;
+        ctx.fillStyle = `rgba(${rgb}, ${coreAlpha})`;
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, f.size * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
   }
 
@@ -1295,14 +1474,48 @@ export function drawJetTips(ctx, cx, cy, sphereRadius, jetLength, pressure, time
     const dir = s.y < cy ? -1 : 1;
     const beaming = dir === -1 ? topBeaming : botBeaming;
     
-    // High-energy shocks strongly beamed
-    const shockBoost = 0.5 + beaming.beamingFactor * 0.5;  // 0.5–3.5
+    // Band-specific beaming for high-energy shocks
+    const radioBoost = 0.8 + beaming.beamingFactor * 0.1;
+    const opticalBoost = 0.7 + beaming.beamingFactor * 0.3;
+    const xrayBoost = 0.5 + beaming.beamingFactor * 0.5;
     
-    const rgb = synchrotronColor(s.energy);
-    ctx.fillStyle = `rgba(${rgb}, ${0.25 * s.life * shockBoost})`;
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
-    ctx.fill();
+    const e = s.energy;
+    const baseAlpha = 0.25 * s.life;
+    
+    // Multi-band shock rendering (strong X-ray → optical → radio)
+    
+    // Radio emission (appears as shock cools)
+    const radioW = radioEmission(e);
+    if (radioW > 0.01) {
+      const rgb = radioColor();
+      const alpha = baseAlpha * radioW * 0.5 * radioBoost;
+      ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.size * 1.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // Optical emission (mid-life shock)
+    const optW = opticalEmission(e);
+    if (optW > 0.01) {
+      const rgb = opticalColor(e);
+      const alpha = baseAlpha * optW * 0.7 * opticalBoost;
+      ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // X-ray emission (strongest at shock birth)
+    const xrayW = xrayEmission(e);
+    if (xrayW > 0.01) {
+      const rgb = xrayColor();
+      const alpha = baseAlpha * xrayW * 0.9 * xrayBoost;
+      ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.size * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   // Calculate compression for halos
@@ -1531,14 +1744,48 @@ export function drawMachDisks(ctx, cx, cy, sphereRadius, jetLength, jets, pressu
       // Disk already has cooled energy, cone cools further
       const diskEnergy = 1 - (0.55 * 0.7);  // Energy at disk position (~0.62)
       const eddyEnergy = diskEnergy * (1 - t * 0.5);  // Cool further downstream
-      const rgb = synchrotronColor(eddyEnergy);
-
-      // Draw turbulence eddy with energy-based color and beaming
-      const alpha = 0.18 * lifeFactor * (1 - t * 0.3) * coneBeamBoost;
-      ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
-      ctx.beginPath();
-      ctx.arc(x, y, size, 0, Math.PI * 2);
-      ctx.fill();
+      
+      const baseAlpha = 0.18 * lifeFactor * (1 - t * 0.3);
+      
+      // Band-specific beaming for turbulence cones
+      const radioBoost = 0.8 + beaming.beamingFactor * 0.1;
+      const opticalBoost = 0.7 + beaming.beamingFactor * 0.3;
+      const xrayBoost = 0.6 + beaming.beamingFactor * 0.4;
+      
+      // Multi-band turbulence cone rendering (radio-dominant with optical)
+      
+      // Radio emission (strong in turbulent regions)
+      const radioW = radioEmission(eddyEnergy);
+      if (radioW > 0.01) {
+        const rgb = radioColor();
+        const alpha = baseAlpha * radioW * 0.6 * radioBoost;
+        ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(x, y, size * 1.15, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      // Optical emission
+      const optW = opticalEmission(eddyEnergy);
+      if (optW > 0.01) {
+        const rgb = opticalColor(eddyEnergy);
+        const alpha = baseAlpha * optW * 0.5 * opticalBoost;
+        ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      // X-ray emission (minimal in cooler turbulence)
+      const xrayW = xrayEmission(eddyEnergy);
+      if (xrayW > 0.01) {
+        const rgb = xrayColor();
+        const alpha = baseAlpha * xrayW * 0.3 * xrayBoost;
+        ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(x, y, size * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
   }
 
@@ -1547,13 +1794,49 @@ export function drawMachDisks(ctx, cx, cy, sphereRadius, jetLength, jets, pressu
     // Determine which jet this turbulence belongs to
     const dir = p.y < cy ? -1 : 1;
     const beaming = dir === -1 ? topBeaming : botBeaming;
-    const turbBeamBoost = 0.6 + beaming.beamingFactor * 0.4;
     
-    const rgb = synchrotronColor(p.energy);
-    ctx.fillStyle = `rgba(${rgb}, ${0.2 * p.life * turbBeamBoost})`;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-    ctx.fill();
+    // Band-specific beaming
+    const radioBoost = 0.8 + beaming.beamingFactor * 0.1;
+    const opticalBoost = 0.7 + beaming.beamingFactor * 0.3;
+    const xrayBoost = 0.6 + beaming.beamingFactor * 0.4;
+    
+    const e = p.energy;
+    const baseAlpha = 0.2 * p.life;
+    
+    // Multi-band turbulence particle rendering
+    
+    // Radio emission (dominant)
+    const radioW = radioEmission(e);
+    if (radioW > 0.01) {
+      const rgb = radioColor();
+      const alpha = baseAlpha * radioW * 0.6 * radioBoost;
+      ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * 1.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // Optical emission
+    const optW = opticalEmission(e);
+    if (optW > 0.01) {
+      const rgb = opticalColor(e);
+      const alpha = baseAlpha * optW * 0.5 * opticalBoost;
+      ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // X-ray emission (weak)
+    const xrayW = xrayEmission(e);
+    if (xrayW > 0.01) {
+      const rgb = xrayColor();
+      const alpha = baseAlpha * xrayW * 0.3 * xrayBoost;
+      ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * 0.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   // Mach disk position: halfway down each jet
