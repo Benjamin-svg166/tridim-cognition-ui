@@ -9,7 +9,7 @@ import { granulationIntensity } from './granulation.js';
 import { drawMagneticArcs } from './magneticArcs.js';
 import { whiteDwarfCooling } from './coolingCurve.js';
 import { starspotPenumbra, starspotLatitudeBias, starspotLifecycle, flareFromSpots, polarSpotBias, drawStarspots } from './starspots.js';
-import { jetIntensity, magneticPressure, drawPolarJets, drawJetGlow, spawnJetParticles, updateJetParticles, drawAccretionDisk, relativisticBeaming, spawnJetKnots, updateJetKnots, updateJetTips, drawJetTips, machDiskStrength, updateMachDisks, drawMachDisks, updateReconnectionFlares, drawReconnectionFlares, spawnMixingParticles, updateMixingParticles, drawMixingParticles, spawnAmbientParticles, updateAmbientParticles, drawAmbientParticles, jetPrecession } from './jets.js';
+import { jetIntensity, magneticPressure, drawPolarJets, drawJetGlow, spawnJetParticles, updateJetParticles, drawAccretionDisk, relativisticBeaming, spawnJetKnots, updateJetKnots, updateJetTips, drawJetTips, machDiskStrength, updateMachDisks, drawMachDisks, updateReconnectionFlares, drawReconnectionFlares, spawnMixingParticles, updateMixingParticles, drawMixingParticles, spawnAmbientParticles, updateAmbientParticles, drawAmbientParticles, jetPrecession, setObservationMode, getObservationMode } from './jets.js';
 
 const NODE_RADIUS = 3;
 const HIGHLIGHT_RADIUS = 5;
@@ -57,6 +57,7 @@ const NineDCubeRenderer = ({
   const [coreTemp, setCoreTemp] = useState(1.0);
   const [showFlares, setShowFlares] = useState(true);
   const [supernovaPhase, setSupernovaPhase] = useState(SupernovaPhase.Stable);
+  const [observationMode, setObservationModeState] = useState('composite');
 
   // Sync state to refs whenever they change
   useEffect(() => {
@@ -855,9 +856,40 @@ const NineDCubeRenderer = ({
 
     rafRef.current = requestAnimationFrame(animate_frame);
 
+    // Keyboard controls for observation modes
+    const handleKeyPress = (e) => {
+      const key = e.key.toLowerCase();
+      let newMode = null;
+      
+      switch(key) {
+        case 'r':
+          newMode = 'radio';
+          break;
+        case 'o':
+          newMode = 'optical';
+          break;
+        case 'x':
+          newMode = 'xray';
+          break;
+        case 'c':
+          newMode = 'composite';
+          break;
+        default:
+          return;
+      }
+      
+      if (newMode) {
+        setObservationMode(newMode);
+        setObservationModeState(newMode);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+
     return () => {
       cancelAnimationFrame(rafRef.current);
       resizeObserver.disconnect();
+      window.removeEventListener('keydown', handleKeyPress);
     };
   }, [highlightedVertices, showEdges, animate, colorMode]);
 
@@ -1019,6 +1051,76 @@ const NineDCubeRenderer = ({
           >
             Reset to Stable
           </button>
+        </div>
+
+        {/* Observation Mode Controls */}
+        <div style={{
+          marginTop: '12px',
+          paddingTop: '12px',
+          borderTop: '1px solid rgba(255,255,255,0.1)',
+        }}>
+          <div style={{
+            fontSize: '11px',
+            fontWeight: '600',
+            color: 'rgba(255,255,255,0.7)',
+            marginBottom: '8px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+          }}>
+            Observation Mode
+          </div>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '6px',
+          }}>
+            {[
+              { mode: 'radio', label: 'Radio (R)', color: '#9370DB' },
+              { mode: 'optical', label: 'Optical (O)', color: '#FFD700' },
+              { mode: 'xray', label: 'X-ray (X)', color: '#00CED1' },
+              { mode: 'composite', label: 'Composite (C)', color: '#FFFFFF' },
+            ].map(({ mode, label, color }) => (
+              <button
+                key={mode}
+                onClick={() => {
+                  setObservationMode(mode);
+                  setObservationModeState(mode);
+                }}
+                style={{
+                  padding: '8px',
+                  fontSize: '10px',
+                  fontWeight: '600',
+                  border: observationMode === mode ? `2px solid ${color}` : '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  background: observationMode === mode ? `${color}20` : 'transparent',
+                  color: observationMode === mode ? color : 'rgba(255,255,255,0.6)',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (observationMode !== mode) {
+                    e.target.style.background = 'rgba(255,255,255,0.05)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (observationMode !== mode) {
+                    e.target.style.background = 'transparent';
+                  }
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div style={{
+            marginTop: '8px',
+            fontSize: '9px',
+            color: 'rgba(255,255,255,0.5)',
+            textAlign: 'center',
+            fontStyle: 'italic',
+          }}>
+            Press R / O / X / C to switch
+          </div>
         </div>
       </div>
       

@@ -31,6 +31,55 @@ let mixingParticles = [];
 // Ambient medium particles (external environment around jets)
 let ambientParticles = [];
 
+// ⭐ OBSERVATION MODES (4 physically-motivated modes)
+// Multi-wavelength observation modes for selective band rendering
+const OBSERVATION_MODES = {
+  radio: {
+    radio: 1.4,    // Boost radio for clarity
+    optical: 0.0,  // Suppress optical
+    xray: 0.0      // Suppress X-ray
+  },
+  optical: {
+    radio: 0.0,    // Suppress radio
+    optical: 1.2,  // Boost optical
+    xray: 0.0      // Suppress X-ray
+  },
+  xray: {
+    radio: 0.0,    // Suppress radio
+    optical: 0.0,  // Suppress optical
+    xray: 2.0      // Boost X-ray (faint, needs amplification)
+  },
+  composite: {
+    radio: 1.0,    // Full radio
+    optical: 1.0,  // Full optical
+    xray: 1.0      // Full X-ray
+  }
+};
+
+// Current observation mode (default: composite - all bands visible)
+let observationMode = 'composite';
+
+/**
+ * Set the current observation mode
+ * @param {string} mode - One of: 'radio', 'optical', 'xray', 'composite'
+ */
+export function setObservationMode(mode) {
+  if (OBSERVATION_MODES[mode]) {
+    observationMode = mode;
+  } else {
+    console.warn(`Invalid observation mode: ${mode}. Using 'composite'.`);
+    observationMode = 'composite';
+  }
+}
+
+/**
+ * Get the current observation mode
+ * @returns {string} Current mode name
+ */
+export function getObservationMode() {
+  return observationMode;
+}
+
 /**
  * Calculate disk shadow factor for occlusion
  * @param {number} y - Y coordinate of particle/knot
@@ -595,6 +644,9 @@ export function updateJetParticles(ctx, dt, time, intensity, centerY, sphereRadi
     // Multi-band rendering: radio, optical, X-ray
     const e = p.energy;
     
+    // Get observation mode multipliers
+    const m = OBSERVATION_MODES[observationMode];
+    
     // Band-specific beaming (X-ray responds most, radio least)
     const radioBoost = 0.8 + beaming.beamingFactor * 0.1;
     const opticalBoost = 0.7 + beaming.beamingFactor * 0.3;
@@ -604,7 +656,7 @@ export function updateJetParticles(ctx, dt, time, intensity, centerY, sphereRadi
     const radioW = radioEmission(e);
     if (radioW > 0.01) {
       const rgb = radioColor();
-      const alpha = baseAlpha * radioW * 0.4 * radioBoost;
+      const alpha = baseAlpha * radioW * 0.4 * radioBoost * m.radio;
       ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
       ctx.beginPath();
       ctx.arc(p.x, p.y, 2.2, 0, Math.PI * 2);
@@ -615,7 +667,7 @@ export function updateJetParticles(ctx, dt, time, intensity, centerY, sphereRadi
     const optW = opticalEmission(e);
     if (optW > 0.01) {
       const rgb = opticalColor(e);
-      const alpha = baseAlpha * optW * 0.7 * opticalBoost;
+      const alpha = baseAlpha * optW * 0.7 * opticalBoost * m.optical;
       ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
       ctx.beginPath();
       ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
@@ -626,7 +678,7 @@ export function updateJetParticles(ctx, dt, time, intensity, centerY, sphereRadi
     const xrayW = xrayEmission(e);
     if (xrayW > 0.01) {
       const rgb = xrayColor();
-      const alpha = baseAlpha * xrayW * 0.9 * xrayBoost;
+      const alpha = baseAlpha * xrayW * 0.9 * xrayBoost * m.xray;
       ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
       ctx.beginPath();
       ctx.arc(p.x, p.y, 1.6, 0, Math.PI * 2);
@@ -1121,13 +1173,16 @@ export function drawMixingParticles(ctx) {
     const e = Math.max(0, m.energy);
     const baseAlpha = 0.25 * m.life;  // Soft, turbulent glow
     
+    // Get observation mode multipliers
+    const modeMult = OBSERVATION_MODES[observationMode];
+    
     // Multi-band rendering: mixing layer is radio-dominant with optical, minimal X-ray
     
     // Radio emission (strong in cooler mixing layer)
     const radioW = radioEmission(e);
     if (radioW > 0.01) {
       const rgb = radioColor();
-      const alpha = baseAlpha * radioW * 0.6;  // Radio-dominant
+      const alpha = baseAlpha * radioW * 0.6 * modeMult.radio;  // Radio-dominant
       ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
       ctx.beginPath();
       ctx.arc(m.x, m.y, m.size * 1.1, 0, Math.PI * 2);
@@ -1138,7 +1193,7 @@ export function drawMixingParticles(ctx) {
     const optW = opticalEmission(e);
     if (optW > 0.01) {
       const rgb = opticalColor(e);
-      const alpha = baseAlpha * optW * 0.4;
+      const alpha = baseAlpha * optW * 0.4 * modeMult.optical;
       ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
       ctx.beginPath();
       ctx.arc(m.x, m.y, m.size, 0, Math.PI * 2);
@@ -1149,7 +1204,7 @@ export function drawMixingParticles(ctx) {
     const xrayW = xrayEmission(e);
     if (xrayW > 0.01) {
       const rgb = xrayColor();
-      const alpha = baseAlpha * xrayW * 0.2;  // Suppressed
+      const alpha = baseAlpha * xrayW * 0.2 * modeMult.xray;  // Suppressed
       ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
       ctx.beginPath();
       ctx.arc(m.x, m.y, m.size * 0.7, 0, Math.PI * 2);
@@ -1336,13 +1391,16 @@ export function drawAmbientParticles(ctx) {
     const e = Math.max(0, p.energy);
     const baseAlpha = 0.12 * p.life;  // Very faint ambient glow
     
+    // Get observation mode multipliers
+    const modeMult = OBSERVATION_MODES[observationMode];
+    
     // Multi-band rendering: ambient medium is radio-only (very low energy)
     
     // Radio emission (only significant band for cool ambient medium)
     const radioW = radioEmission(e);
     if (radioW > 0.01) {
       const rgb = radioColor();
-      const alpha = baseAlpha * radioW * 0.7;  // Radio-dominant fog
+      const alpha = baseAlpha * radioW * 0.7 * modeMult.radio;  // Radio-dominant fog
       ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.size * 1.2, 0, Math.PI * 2);
@@ -1353,7 +1411,7 @@ export function drawAmbientParticles(ctx) {
     const optW = opticalEmission(e);
     if (optW > 0.01) {
       const rgb = opticalColor(e);
-      const alpha = baseAlpha * optW * 0.3;  // Suppressed
+      const alpha = baseAlpha * optW * 0.3 * modeMult.optical;  // Suppressed
       ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
@@ -1387,6 +1445,9 @@ export function drawReconnectionFlares(ctx, time, jets) {
     // Apply beaming to flare (high-energy spine event)
     const beaming = f.dir === -1 ? topBeaming : botBeaming;
     
+    // Get observation mode multipliers
+    const modeMult = OBSERVATION_MODES[observationMode];
+    
     // Band-specific beaming (X-ray most responsive)
     const radioBoost = 0.8 + beaming.beamingFactor * 0.1;
     const opticalBoost = 0.7 + beaming.beamingFactor * 0.3;
@@ -1401,7 +1462,7 @@ export function drawReconnectionFlares(ctx, time, jets) {
     const radioW = radioEmission(e);
     if (radioW > 0.01) {
       const rgb = radioColor();
-      const alpha = baseAlpha * radioW * 0.5 * radioBoost;
+      const alpha = baseAlpha * radioW * 0.5 * radioBoost * modeMult.radio;
       ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
       ctx.beginPath();
       ctx.arc(f.x, f.y, f.size * 1.2, 0, Math.PI * 2);
@@ -1412,7 +1473,7 @@ export function drawReconnectionFlares(ctx, time, jets) {
     const optW = opticalEmission(e);
     if (optW > 0.01) {
       const rgb = opticalColor(e);
-      const alpha = baseAlpha * optW * 0.7 * opticalBoost;
+      const alpha = baseAlpha * optW * 0.7 * opticalBoost * modeMult.optical;
       ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
       ctx.beginPath();
       ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
@@ -1423,7 +1484,7 @@ export function drawReconnectionFlares(ctx, time, jets) {
     const xrayW = xrayEmission(e);
     if (xrayW > 0.01) {
       const rgb = xrayColor();
-      const alpha = baseAlpha * xrayW * 0.9 * xrayBoost;
+      const alpha = baseAlpha * xrayW * 0.9 * xrayBoost * modeMult.xray;
       ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
       ctx.beginPath();
       ctx.arc(f.x, f.y, f.size * 0.7, 0, Math.PI * 2);
@@ -1431,7 +1492,7 @@ export function drawReconnectionFlares(ctx, time, jets) {
       
       // Bright X-ray core for extra punch when fresh
       if (f.life > 0.7) {
-        const coreAlpha = 0.6 * f.life * xrayBoost;
+        const coreAlpha = 0.6 * f.life * xrayBoost * modeMult.xray;
         ctx.fillStyle = `rgba(${rgb}, ${coreAlpha})`;
         ctx.beginPath();
         ctx.arc(f.x, f.y, f.size * 0.3, 0, Math.PI * 2);
@@ -1474,6 +1535,9 @@ export function drawJetTips(ctx, cx, cy, sphereRadius, jetLength, pressure, time
     const dir = s.y < cy ? -1 : 1;
     const beaming = dir === -1 ? topBeaming : botBeaming;
     
+    // Get observation mode multipliers
+    const modeMult = OBSERVATION_MODES[observationMode];
+    
     // Band-specific beaming for high-energy shocks
     const radioBoost = 0.8 + beaming.beamingFactor * 0.1;
     const opticalBoost = 0.7 + beaming.beamingFactor * 0.3;
@@ -1488,7 +1552,7 @@ export function drawJetTips(ctx, cx, cy, sphereRadius, jetLength, pressure, time
     const radioW = radioEmission(e);
     if (radioW > 0.01) {
       const rgb = radioColor();
-      const alpha = baseAlpha * radioW * 0.5 * radioBoost;
+      const alpha = baseAlpha * radioW * 0.5 * radioBoost * modeMult.radio;
       ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.size * 1.2, 0, Math.PI * 2);
@@ -1499,7 +1563,7 @@ export function drawJetTips(ctx, cx, cy, sphereRadius, jetLength, pressure, time
     const optW = opticalEmission(e);
     if (optW > 0.01) {
       const rgb = opticalColor(e);
-      const alpha = baseAlpha * optW * 0.7 * opticalBoost;
+      const alpha = baseAlpha * optW * 0.7 * opticalBoost * modeMult.optical;
       ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
@@ -1510,7 +1574,7 @@ export function drawJetTips(ctx, cx, cy, sphereRadius, jetLength, pressure, time
     const xrayW = xrayEmission(e);
     if (xrayW > 0.01) {
       const rgb = xrayColor();
-      const alpha = baseAlpha * xrayW * 0.9 * xrayBoost;
+      const alpha = baseAlpha * xrayW * 0.9 * xrayBoost * modeMult.xray;
       ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.size * 0.7, 0, Math.PI * 2);
@@ -1747,6 +1811,9 @@ export function drawMachDisks(ctx, cx, cy, sphereRadius, jetLength, jets, pressu
       
       const baseAlpha = 0.18 * lifeFactor * (1 - t * 0.3);
       
+      // Get observation mode multipliers
+      const m = OBSERVATION_MODES[observationMode];
+      
       // Band-specific beaming for turbulence cones
       const radioBoost = 0.8 + beaming.beamingFactor * 0.1;
       const opticalBoost = 0.7 + beaming.beamingFactor * 0.3;
@@ -1758,7 +1825,7 @@ export function drawMachDisks(ctx, cx, cy, sphereRadius, jetLength, jets, pressu
       const radioW = radioEmission(eddyEnergy);
       if (radioW > 0.01) {
         const rgb = radioColor();
-        const alpha = baseAlpha * radioW * 0.6 * radioBoost;
+        const alpha = baseAlpha * radioW * 0.6 * radioBoost * m.radio;
         ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
         ctx.beginPath();
         ctx.arc(x, y, size * 1.15, 0, Math.PI * 2);
@@ -1769,7 +1836,7 @@ export function drawMachDisks(ctx, cx, cy, sphereRadius, jetLength, jets, pressu
       const optW = opticalEmission(eddyEnergy);
       if (optW > 0.01) {
         const rgb = opticalColor(eddyEnergy);
-        const alpha = baseAlpha * optW * 0.5 * opticalBoost;
+        const alpha = baseAlpha * optW * 0.5 * opticalBoost * m.optical;
         ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
         ctx.beginPath();
         ctx.arc(x, y, size, 0, Math.PI * 2);
@@ -1780,7 +1847,7 @@ export function drawMachDisks(ctx, cx, cy, sphereRadius, jetLength, jets, pressu
       const xrayW = xrayEmission(eddyEnergy);
       if (xrayW > 0.01) {
         const rgb = xrayColor();
-        const alpha = baseAlpha * xrayW * 0.3 * xrayBoost;
+        const alpha = baseAlpha * xrayW * 0.3 * xrayBoost * m.xray;
         ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
         ctx.beginPath();
         ctx.arc(x, y, size * 0.8, 0, Math.PI * 2);
@@ -1794,6 +1861,9 @@ export function drawMachDisks(ctx, cx, cy, sphereRadius, jetLength, jets, pressu
     // Determine which jet this turbulence belongs to
     const dir = p.y < cy ? -1 : 1;
     const beaming = dir === -1 ? topBeaming : botBeaming;
+    
+    // Get observation mode multipliers
+    const m = OBSERVATION_MODES[observationMode];
     
     // Band-specific beaming
     const radioBoost = 0.8 + beaming.beamingFactor * 0.1;
@@ -1809,7 +1879,7 @@ export function drawMachDisks(ctx, cx, cy, sphereRadius, jetLength, jets, pressu
     const radioW = radioEmission(e);
     if (radioW > 0.01) {
       const rgb = radioColor();
-      const alpha = baseAlpha * radioW * 0.6 * radioBoost;
+      const alpha = baseAlpha * radioW * 0.6 * radioBoost * m.radio;
       ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.size * 1.1, 0, Math.PI * 2);
@@ -1820,7 +1890,7 @@ export function drawMachDisks(ctx, cx, cy, sphereRadius, jetLength, jets, pressu
     const optW = opticalEmission(e);
     if (optW > 0.01) {
       const rgb = opticalColor(e);
-      const alpha = baseAlpha * optW * 0.5 * opticalBoost;
+      const alpha = baseAlpha * optW * 0.5 * opticalBoost * m.optical;
       ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
@@ -1831,7 +1901,7 @@ export function drawMachDisks(ctx, cx, cy, sphereRadius, jetLength, jets, pressu
     const xrayW = xrayEmission(e);
     if (xrayW > 0.01) {
       const rgb = xrayColor();
-      const alpha = baseAlpha * xrayW * 0.3 * xrayBoost;
+      const alpha = baseAlpha * xrayW * 0.3 * xrayBoost * m.xray;
       ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.size * 0.8, 0, Math.PI * 2);
