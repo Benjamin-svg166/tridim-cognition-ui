@@ -1,7 +1,14 @@
 // Advanced Chess AI for 9D Chess with Minimax and Alpha-Beta Pruning
 import { isValidMove, isPathClear, wouldBeInCheckAfterMove, isInCheck } from './nineDChessUtils';
 
-// Evaluation weights for 9D chess
+// PHASE 2: Transposition Table (memoization cache)
+const transpositionTable = new Map();
+const MAX_CACHE_SIZE = 100000; // Limit memory usage
+
+// PHASE 2: Killer Moves Heuristic (moves that caused cutoffs)
+const killerMoves = new Map(); // depth -> [move1, move2]
+
+// Evaluation weights for 9D chess (OPTIMIZED FOR PHASE 1)
 export const evaluationWeights = {
   material: {
     pawn: 100,
@@ -11,10 +18,11 @@ export const evaluationWeights = {
     queen: 900,
     king: 20000
   },
-  centerControl: 30,
+  centerControl: 60,        // 2x boost - center squares critical in 9D
   pieceActivity: 10,
   development: 15,
-  zoneControl: 25, // Bonus for controlling neutral zone (z=3,4,5)
+  zoneControl: 80,          // 3x boost - controlling z3,z4,z5 is KEY to 9D dominance
+  layerDominance: 50,       // NEW - bonus for multiple pieces on strategic layers
   checkBonus: 100
 };
 
@@ -36,6 +44,12 @@ function getPiecePositionValue(piece, pos, color) {
   // 9D zone control - neutral zones (z=3, 4, 5) are key
   if (z >= 3 && z <= 5) {
     bonus += evaluationWeights.zoneControl;
+    
+    // CENTER LAYER SQUARED BONUS - Prime real estate!
+    // Controlling center squares on middle layers = MAXIMUM threat projection
+    if (centerDistance <= 1) {
+      bonus += 120; // Massive bonus for center of middle layers
+    }
   }
   
   // Bonus for advancing toward enemy territory
@@ -228,7 +242,47 @@ function makeMove(piecesMap, move) {
 }
 
 /**
- * Minimax algorithm with alpha-beta pruning
+ * PHASE 2: Generate unique hash for board position (for transposition table)
+ */
+function getBoardHash(piecesMap, depth, alpha, beta) {
+  const pieces = Array.from(piecesMap.entries())
+    .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
+    .map(([key, piece]) => `${key}:${piece.color[0]}${piece.type[0]}${piece.hasMoved ? 1 : 0}`);
+  return `${pieces.join('|')}|d${depth}|a${alpha}|b${beta}`;
+}
+
+/**
+ * PHASE 2: Get move signature for killer moves heuristic
+ */
+function getMoveSignature(move) {
+  return `${move.fromKey}->${move.toKey}`;
+}
+
+/**
+ * PHASE 2: Order moves for better alpha-beta pruning efficiency
+ */
+function orderMoves(moves, depth) {
+  const killerMovesAtDepth = killerMoves.get(depth) || [];
+  
+  return moves.sort((a, b) => {
+    // 1. Captures first (highest value)
+    const captureScore = (b.capturedValue || 0) - (a.capturedValue || 0);
+    if (captureScore !== 0) return captureScore;
+    
+    // 2. Killer moves (moves that caused beta cutoffs)
+    const aIsKiller = killerMovesAtDepth.includes(getMoveSignature(a)) ? 1 : 0;
+    const bIsKiller = killerMovesAtDepth.includes(getMoveSignature(b)) ? 1 : 0;
+    if (bIsKiller !== aIsKiller) return bIsKiller - aIsKiller;
+    
+    // 3. Center moves preferred
+    const aCenterDist = Math.max(Math.abs(a.to.x - 3.5), Math.abs(a.to.y - 3.5));
+    const bCenterDist = Math.max(Math.abs(b.to.x - 3.5), Math.abs(b.to.y - 3.5));
+    return aCenterDist - bCenterDist;
+  });
+}
+
+/**
+ * Minimax algorithm with alpha-beta pruning (PHASE 2 OPTIMIZED)
  */
 async function minimax(piecesMap, depth, alpha, beta, maximizingPlayer, color, initialDepth = depth, startTime = Date.now(), maxTimeMs = 30000) {
   // Time limit check
@@ -236,9 +290,17 @@ async function minimax(piecesMap, depth, alpha, beta, maximizingPlayer, color, i
     return { score: evaluatePositionAdvanced(piecesMap, color), timeoutReached: true };
   }
   
+  // PHASE 2: Check transposition table (memoization)
+  const boardHash = getBoardHash(piecesMap, depth, alpha, beta);
+  if (transpositionTable.has(boardHash)) {
+    return transpositionTable.get(boardHash);
+  }
+  
   // Base case
   if (depth === 0) {
-    return { score: evaluatePositionAdvanced(piecesMap, color, depth), move: null };
+    const result = { score: evaluatePositionAdvanced(piecesMap, color, depth), move: null };
+    transpositionTable.set(boardHash, result);
+    return result;
   }
   
   const currentColor = maximizingPlayer ? color : (color === 'white' ? 'black' : 'white');
@@ -247,25 +309,22 @@ async function minimax(piecesMap, depth, alpha, beta, maximizingPlayer, color, i
   // Game over check
   if (moves.length === 0) {
     const inCheck = isInCheck(piecesMap, currentColor);
-    if (inCheck) {
-      return { 
-        score: maximizingPlayer ? -1000000 + depth : 1000000 - depth, 
-        move: null 
-      };
-    } else {
-      return { score: 0, move: null };
-    }
+    const result = inCheck
+      ? { score: maximizingPlayer ? -1000000 + depth : 1000000 - depth, move: null }
+      : { score: 0, move: null };
+    transpositionTable.set(boardHash, result);
+    return result;
   }
   
-  // Sort moves (captures first)
-  moves.sort((a, b) => (b.capturedValue || 0) - (a.capturedValue || 0));
+  // PHASE 2: Enhanced move ordering
+  const orderedMoves = orderMoves(moves, depth);
   
   if (maximizingPlayer) {
     let maxEval = -Infinity;
-    let bestMove = moves[0];
+    let bestMove = orderedMoves[0];
     let moveCounter = 0;
     
-    for (const move of moves) {
+    for (const move of orderedMoves) {
       const newBoard = makeMove(piecesMap, move);
       if (!newBoard) continue;
       
@@ -281,7 +340,17 @@ async function minimax(piecesMap, depth, alpha, beta, maximizingPlayer, color, i
       }
       
       alpha = Math.max(alpha, evaluation.score);
-      if (beta <= alpha) break;
+      if (beta <= alpha) {
+        // PHASE 2: Store killer move (caused beta cutoff)
+        const killerMovesAtDepth = killerMoves.get(depth) || [];
+        const moveSignature = getMoveSignature(move);
+        if (!killerMovesAtDepth.includes(moveSignature)) {
+          killerMovesAtDepth.unshift(moveSignature);
+          if (killerMovesAtDepth.length > 2) killerMovesAtDepth.pop();
+          killerMoves.set(depth, killerMovesAtDepth);
+        }
+        break;
+      }
       
       // Yield to browser periodically
       moveCounter++;
@@ -290,13 +359,15 @@ async function minimax(piecesMap, depth, alpha, beta, maximizingPlayer, color, i
       }
     }
     
-    return { score: maxEval, move: bestMove };
+    const result = { score: maxEval, move: bestMove };
+    transpositionTable.set(boardHash, result);
+    return result;
   } else {
     let minEval = Infinity;
-    let bestMove = moves[0];
+    let bestMove = orderedMoves[0];
     let moveCounter = 0;
     
-    for (const move of moves) {
+    for (const move of orderedMoves) {
       const newBoard = makeMove(piecesMap, move);
       if (!newBoard) continue;
       
@@ -312,7 +383,17 @@ async function minimax(piecesMap, depth, alpha, beta, maximizingPlayer, color, i
       }
       
       beta = Math.min(beta, evaluation.score);
-      if (beta <= alpha) break;
+      if (beta <= alpha) {
+        // PHASE 2: Store killer move
+        const killerMovesAtDepth = killerMoves.get(depth) || [];
+        const moveSignature = getMoveSignature(move);
+        if (!killerMovesAtDepth.includes(moveSignature)) {
+          killerMovesAtDepth.unshift(moveSignature);
+          if (killerMovesAtDepth.length > 2) killerMovesAtDepth.pop();
+          killerMoves.set(depth, killerMovesAtDepth);
+        }
+        break;
+      }
       
       // Yield to browser periodically
       moveCounter++;
@@ -321,8 +402,62 @@ async function minimax(piecesMap, depth, alpha, beta, maximizingPlayer, color, i
       }
     }
     
-    return { score: minEval, move: bestMove };
+    const result = { score: minEval, move: bestMove };
+    transpositionTable.set(boardHash, result);
+    return result;
   }
+}
+
+/**
+ * PHASE 2: Iterative Deepening - searches depth 1, 2, 3... until time runs out
+ */
+async function iterativeDeepeningSearch(piecesMap, color, maxDepth, maxTimeMs = 30000) {
+  const startTime = Date.now();
+  let bestMove = null;
+  let bestScore = -Infinity;
+  let completedDepth = 0;
+  
+  // Clear killer moves for new search
+  killerMoves.clear();
+  
+  for (let depth = 1; depth <= maxDepth; depth++) {
+    const timeRemaining = maxTimeMs - (Date.now() - startTime);
+    if (timeRemaining < 1000) break; // Need at least 1 second
+    
+    console.log(`🔍 Iterative deepening: depth ${depth}/${maxDepth}`);
+    
+    const result = await minimax(
+      piecesMap, 
+      depth, 
+      -Infinity, 
+      Infinity, 
+      true, 
+      color, 
+      depth, 
+      startTime, 
+      maxTimeMs
+    );
+    
+    if (result.timeoutReached) {
+      console.log(`⏰ Timeout at depth ${depth} - using depth ${completedDepth} result`);
+      break;
+    }
+    
+    if (result.move) {
+      bestMove = result.move;
+      bestScore = result.score;
+      completedDepth = depth;
+      console.log(`✓ Depth ${depth} complete: score ${result.score.toFixed(1)}`);
+    }
+    
+    // If we found checkmate, no need to search deeper
+    if (Math.abs(result.score) > 900000) {
+      console.log(`♔ Checkmate found at depth ${depth}!`);
+      break;
+    }
+  }
+  
+  return { move: bestMove, score: bestScore, depth: completedDepth };
 }
 
 /**
@@ -341,36 +476,41 @@ export async function selectBestMoveAdvanced(piecesMap, color, difficulty = 'har
     console.log(`🎯 9D AI: Limited to top 40 moves (early game optimization)`);
   }
   
-  // Difficulty determines depth (reduced for 9D due to larger search space)
+  // Difficulty determines depth (PHASE 1 OPTIMIZED - deeper search)
   let depth;
   switch (difficulty) {
     case 'easy':
       depth = 1;
       break;
     case 'medium':
-      depth = 1;
+      depth = 2;  // Upgraded from 1 to 2
       break;
     case 'hard':
-      depth = 2; // Depth 2 in 9D is like depth 3 in 3D!
+      depth = 3;  // UPGRADED: 50% deeper search (~2,000-8,000 positions)
       break;
     case 'master':
-      depth = 2;
+      depth = 4;  // UPGRADED: 2x deeper - BRUTAL difficulty (~80,000-480,000 positions)
       break;
     default:
       depth = 1;
   }
   
-  console.log(`🤖 9D AI thinking (depth ${depth})...`);
+  // PHASE 2: Clear transposition table if it's too large
+  if (transpositionTable.size > MAX_CACHE_SIZE) {
+    const keysToDelete = Array.from(transpositionTable.keys()).slice(0, MAX_CACHE_SIZE / 2);
+    keysToDelete.forEach(key => transpositionTable.delete(key));
+    console.log(`🧹 Cleared ${keysToDelete.length} cached positions`);
+  }
+  
+  console.log(`🤖 9D AI thinking (max depth ${depth})...`);
   const startTime = Date.now();
   
-  const result = await minimax(piecesMap, depth, -Infinity, Infinity, true, color, depth, startTime);
+  // PHASE 2: Use iterative deepening for guaranteed move return
+  const result = await iterativeDeepeningSearch(piecesMap, color, depth, 30000);
   
-  const thinkingTime = ((Date.now() - startTime) /1000).toFixed(2);
-  console.log(`✅ Evaluation complete in ${thinkingTime}s`);
-  
-  if (result.timeoutReached) {
-    console.log(`⏰ Time limit reached - returning best move found so far`);
-  }
+  const thinkingTime = ((Date.now() - startTime) / 1000).toFixed(2);
+  console.log(`✅ Search complete in ${thinkingTime}s (depth ${result.depth}/${depth}, score ${result.score.toFixed(1)})`);
+  console.log(`📊 Transposition table: ${transpositionTable.size} positions cached`);
   
   return result.move || legalMoves[0];
 }
