@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Text } from '@react-three/drei';
 
@@ -293,6 +293,33 @@ export default function NineDVisualizer() {
   const [selectedColor, setSelectedColor] = useState('white');
   const [controlsCollapsed, setControlsCollapsed] = useState(false);
   const [showNotation, setShowNotation] = useState(false);
+  const [isPrecisionMode, setIsPrecisionMode] = useState(true);
+
+  // Keyboard shortcut: Hold Spacebar to unlock free rotation
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Hold Spacebar to unlock Free Spin mode
+      if (e.code === 'Space' && !e.repeat) {
+        e.preventDefault(); // Prevent page scroll
+        setIsPrecisionMode(false);
+      }
+    };
+
+    const handleKeyUp = (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        setIsPrecisionMode(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
 
   const handleSquareClick = (x, y, z) => {
     const squareKey = `${x},${y},${z}`;
@@ -534,7 +561,10 @@ export default function NineDVisualizer() {
             </div>
 
             <div style={{ marginTop: '15px', padding: '10px', background: 'rgba(255, 164, 27, 0.1)', borderRadius: '5px', fontSize: '12px' }}>
-              <strong>💡 Tip:</strong> Click any square to place a piece. Click a piece to see its possible moves (highlighted in green).
+              <strong>💡 Tips:</strong>
+              <div style={{ marginTop: '5px' }}>• Click any square to place a piece</div>
+              <div>• Click a piece to see its possible moves (green)</div>
+              <div style={{ marginTop: '5px', color: '#ffa41b', fontWeight: 'bold' }}>⌨️ Hold SPACEBAR to rotate the board freely!</div>
             </div>
 
             <div style={{ marginTop: '10px', fontSize: '11px', color: '#888' }}>
@@ -575,15 +605,40 @@ export default function NineDVisualizer() {
         {/* Coordinate labels */}
         <CoordinateLabels />
 
-        {/* Controls */}
+        {/* Controls - Hold Spacebar for Free Rotation */}
         <OrbitControls
           enablePan={true}
           enableZoom={true}
-          enableRotate={true}
+          enableRotate={!isPrecisionMode}
+          enableDamping={!isPrecisionMode}
+          dampingFactor={0.05}
           minDistance={8}
           maxDistance={40}
+          rotateSpeed={isPrecisionMode ? 0 : 0.8}
         />
       </Canvas>
+
+      {/* Precision Mode Indicator */}
+      <div style={{
+        position: 'absolute',
+        top: 80,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 1000,
+        background: isPrecisionMode 
+          ? 'rgba(76, 175, 80, 0.9)' 
+          : 'rgba(255, 164, 27, 0.9)',
+        padding: '10px 20px',
+        borderRadius: '20px',
+        color: '#ffffff',
+        fontSize: '14px',
+        fontWeight: 'bold',
+        boxShadow: '0 0 20px rgba(0, 0, 0, 0.5)',
+        transition: 'all 0.2s ease',
+        border: '2px solid rgba(255, 255, 255, 0.3)'
+      }}>
+        {isPrecisionMode ? '🔒 Precision Mode (Hold SPACE to rotate)' : '🌀 Free Spin Mode (Release to lock)'}
+      </div>
     </div>
   );
 }
