@@ -230,6 +230,7 @@ const NineDChessGame3D = () => {
   const [showHint, setShowHint] = useState(false);
   const [hintMove, setHintMove] = useState(null);
   const [aiThinking, setAiThinking] = useState(false);
+  const isComputerThinkingRef = useRef(false); // Prevent duplicate computer moves
   const [showNotation, setShowNotation] = useState(true);
   const [drawOfferedBy, setDrawOfferedBy] = useState(null); // 'white', 'black', or null
   
@@ -406,12 +407,25 @@ const NineDChessGame3D = () => {
     setHighlightedMoves(validMoves);
   };
 
+  // Format move notation (must be defined before executeMove)
+  const formatMove = useCallback((from, to, piece, captured, promoteTo) => {
+    const files = 'abcdefgh';
+    const pieceSymbol = piece.type === 'pawn' ? '' : piece.type[0].toUpperCase();
+    const captureSymbol = captured ? 'x' : '';
+    const fromNotation = `${files[from.x]}${8 - from.y}z${from.z}`;
+    const toNotation = `${files[to.x]}${8 - to.y}z${to.z}`;
+    const promotion = promoteTo ? `=${promoteTo[0].toUpperCase()}` : '';
+    return `${pieceSymbol}${fromNotation}${captureSymbol}${toNotation}${promotion}`;
+  }, []);
+
   // Execute a move
-  const executeMove = (from, to, promoteTo = null) => {
+  const executeMove = useCallback((from, to, promoteTo = null) => {
     const fromKey = `${from.x},${from.y},${from.z}`;
     const toKey = `${to.x},${to.y},${to.z}`;
     const piece = piecesRef.current.get(fromKey);
     const captured = piecesRef.current.get(toKey);
+
+    console.log('🔵 [9D] executeMove called - current turn:', toMoveRef.current, 'piece:', piece?.type, 'from:', fromKey, 'to:', toKey);
 
     // CRITICAL: Prevent capturing your own pieces
     if (captured && captured.color === piece.color) {
@@ -454,14 +468,15 @@ const NineDChessGame3D = () => {
     calculateMaterial();
     evaluateCurrentPosition();
 
-    // Check game status
-    const nextPlayer = toMove === 'white' ? 'black' : 'white';
+    // Check game status - use ref to avoid dependency issues
+    const currentPlayer = toMoveRef.current;
+    const nextPlayer = currentPlayer === 'white' ? 'black' : 'white';
     const inCheck = isInCheck(piecesRef.current, nextPlayer);
     const inCheckmate = inCheck && isCheckmate(piecesRef.current, nextPlayer);
     const inStalemate = !inCheck && isStalemate(piecesRef.current, nextPlayer);
 
     if (inCheckmate) {
-      setGameStatus(`Checkmate! ${toMove} wins!`);
+      setGameStatus(`Checkmate! ${currentPlayer} wins!`);
     } else if (inStalemate) {
       setGameStatus('Stalemate! Draw.');
     } else if (inCheck) {
@@ -473,21 +488,11 @@ const NineDChessGame3D = () => {
     // Switch turn
     toMoveRef.current = nextPlayer;
     setToMove(nextPlayer);
+    console.log('🔄 [9D] Turn switched from', currentPlayer, 'to', nextPlayer);
     setVersion(v => v + 1);
     moveStartTimeRef.current = Date.now();
     setDrawOfferedBy(null); // Clear any pending draw offers after a move
-  };
-
-  // Format move notation
-  const formatMove = (from, to, piece, captured, promoteTo) => {
-    const files = 'abcdefgh';
-    const pieceSymbol = piece.type === 'pawn' ? '' : piece.type[0].toUpperCase();
-    const captureSymbol = captured ? 'x' : '';
-    const fromNotation = `${files[from.x]}${8 - from.y}z${from.z}`;
-    const toNotation = `${files[to.x]}${8 - to.y}z${to.z}`;
-    const promotion = promoteTo ? `=${promoteTo[0].toUpperCase()}` : '';
-    return `${pieceSymbol}${fromNotation}${captureSymbol}${toNotation}${promotion}`;
-  };
+  }, [calculateMaterial, evaluateCurrentPosition, formatMove]);
 
   // AI draw response
   useEffect(() => {
@@ -506,36 +511,64 @@ const NineDChessGame3D = () => {
     }
   }, [drawOfferedBy, gameMode, computerColor, gameStatus]);
 
-  // AI move
-  useEffect(() => {
-    if (gameMode === 'pvc' && toMove === computerColor && !gameStatus?.includes('mate') && !promotionPending) {
-      setAiThinking(true);
-      const timer = setTimeout(() => {
-        makeComputerMove();
-      }, 500);
-      return () => clearTimeout(timer);
+  // Wrap makeComputerMove in useCallback with proper dependencies
+  const makeComputerMove = useCallback(async () => {
+    console.log('🎯 [9D] makeComputerMove called - gameMode:', gameMode, 'toMove:', toMove, 'computerColor:', computerColor, 'isThinking:', isComputerThinkingRef.current);
+    
+    // Prevent duplicate moves
+    if (isComputerThinkingRef.current) {
+      console.log('⏸️ [9D] Computer already thinking, skipping duplicate call');
+      return;
     }
-  }, [toMove, gameMode, computerColor, gameStatus, promotionPending]);
-
-  const makeComputerMove = async () => {
+    
+    isComputerThinkingRef.current = true;
+    console.log('✅ [9D] Computer is calculating move...');
+    
     try {
       const move = useAdvancedAI && (difficulty === 'hard' || difficulty === 'master')
         ? await selectBestMoveAdvanced(piecesRef.current, computerColor, difficulty)
         : selectBestMove(piecesRef.current, computerColor, difficulty);
 
+      console.log('🔍 [9D] AI returned move:', move);
+
       if (move) {
+        console.log('🎲 [9D] Executing move:', move.from, '→', move.to);
         if (move.piece === 'pawn' && canPromote(move.to, computerColor)) {
           executeMove(move.from, move.to, 'queen');
         } else {
           executeMove(move.from, move.to);
         }
+        console.log('🎉 [9D] Computer move completed');
+      } else {
+        console.log('❌ [9D] No valid move found');
       }
     } catch (error) {
-      console.error('Error in makeComputerMove:', error);
+      console.error('❌ [9D] Error in makeComputerMove:', error);
     } finally {
       setAiThinking(false);
+      isComputerThinkingRef.current = false;
+      console.log('🔓 [9D] Thinking lock released');
     }
-  };
+  }, [useAdvancedAI, difficulty, computerColor, executeMove]);
+
+  // AI move
+  useEffect(() => {
+    console.log('🔄 [9D] useEffect triggered - gameMode:', gameMode, 'toMove:', toMove, 'computerColor:', computerColor, 'gameStatus:', gameStatus, 'promotionPending:', promotionPending);
+    
+    if (gameMode === 'pvc' && toMove === computerColor && !gameStatus?.includes('mate') && !promotionPending) {
+      console.log('✅ [9D] All conditions met - scheduling computer move');
+      setAiThinking(true);
+      const timer = setTimeout(() => {
+        makeComputerMove();
+      }, 500);
+      return () => {
+        console.log('🧹 [9D] Cleaning up timer');
+        clearTimeout(timer);
+      };
+    } else {
+      console.log('❌ [9D] Conditions not met - gameMode:', gameMode === 'pvc', 'turn:', toMove === computerColor, 'notMate:', !gameStatus?.includes('mate'), 'notPromotion:', !promotionPending);
+    }
+  }, [toMove, gameMode, computerColor, gameStatus, promotionPending, makeComputerMove]);
 
   // Promotion handler
   const handlePromotion = (pieceType) => {

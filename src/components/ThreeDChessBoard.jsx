@@ -85,11 +85,22 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
   const [promotionPending, setPromotionPending] = useState(null); // { from, to, piece } waiting for promotion choice
   const [gameStatus, setGameStatus] = useState(null); // 'check', 'checkmate', 'stalemate', or null
   const [boardSpacing, setBoardSpacing] = useState(120); // spacing between boards in pixels (8 = contracted, 80+ = expanded)
-  const [gameMode, setGameMode] = useState('pvc'); // 'pvp' or 'pvc' (player vs computer) - DEFAULT TO PvC
-  const [difficulty, setDifficulty] = useState('easy'); // 'easy', 'medium', 'hard', 'master' - DEFAULT TO EASY
+  const isComputerThinkingRef = useRef(false); // Prevent multiple simultaneous computer moves
+  const [gameMode, setGameMode] = useState(() => {
+    return localStorage.getItem('chess3d_gameMode') || 'pvc';
+  }); // 'pvp' or 'pvc' (player vs computer) - DEFAULT TO PvC
+  const [difficulty, setDifficulty] = useState(() => {
+    return localStorage.getItem('chess3d_difficulty') || 'easy';
+  }); // 'easy', 'medium', 'hard', 'master' - DEFAULT TO EASY
   const [useAdvancedAI, setUseAdvancedAI] = useState(true); // Use new advanced AI vs old simple AI
-  const [computerColor, setComputerColor] = useState('black'); // which color the computer plays
-  const [trainingProgress, setTrainingProgress] = useState(null); // { epoch, loss } or null
+  const [computerColor, setComputerColor] = useState(() => {
+    // TEMPORARY FIX: Force white until localStorage sync issue is resolved
+    const stored = localStorage.getItem('chess3d_computerColor');
+    console.log('🔧 Initializing computerColor - localStorage value:', stored);
+    return 'white'; // Force white for now
+    // return stored || 'black';
+  }); // which color the computer plays
+  const [trainingProgress, setTrainingProgress] = useState(null); // { epoch, loss} or null
   const [nnStatus, setNNStatus] = useState('untrained'); // 'untrained', 'training', 'trained'
   const [trainingDataSize, setTrainingDataSize] = useState(0); // Track training data size for UI display
   const gamePositionsRef = useRef([]); // Track all positions in current game for reinforcement learning
@@ -204,6 +215,20 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
     }
   }, []);
 
+  // Persist game mode and AI settings to localStorage
+  useEffect(() => {
+    localStorage.setItem('chess3d_gameMode', gameMode);
+  }, [gameMode]);
+
+  useEffect(() => {
+    localStorage.setItem('chess3d_difficulty', difficulty);
+  }, [difficulty]);
+
+  useEffect(() => {
+    localStorage.setItem('chess3d_computerColor', computerColor);
+    console.log('💾 Saved computerColor to localStorage:', computerColor);
+  }, [computerColor]);
+
   // Save game state to localStorage after moves
   useEffect(() => {
     // Skip if loading from storage
@@ -233,6 +258,8 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
     // Skip if version hasn't changed (prevent infinite loops)
     if (lastRenderedVersion.current === version) return;
     lastRenderedVersion.current = version;
+    
+    console.log('🎨 RENDERING BOARD - version:', version, 'pieces:', piecesRef.current.size);
     
     // Initialize sample pieces if empty (only once)
     if (!hasInitialized.current && piecesRef.current.size === 0) {
@@ -350,9 +377,11 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
       });
 
       // pieces with enhanced visibility on transparent boards
+      let piecesDrawn = 0;
       piecesRef.current.forEach((p) => {
         const { x, y, z: pz } = p.pos;
         if (pz !== z) return;
+        piecesDrawn++;
         
         // Don't draw pieces that are currently being animated
         if (animationRef.current) {
@@ -397,6 +426,9 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
         ctx.textAlign = 'start';
         ctx.textBaseline = 'alphabetic';
       });
+      
+      // Log all levels to see piece movement
+      console.log(`🎨 Level ${z}: Drew ${piecesDrawn} pieces`);
 
       // animated piece (during undo/redo replay or castling)
       if (animationRef.current && animationRef.current.startTime) {
@@ -772,8 +804,15 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
       gameModeIsPVC: gameMode === 'pvc',
       toMove, 
       computerColor, 
-      gameStatus 
+      gameStatus,
+      isThinking: isComputerThinkingRef.current
     });
+    
+    // Prevent duplicate moves
+    if (isComputerThinkingRef.current) {
+      console.log('⏸️ Computer already thinking, skipping duplicate call');
+      return;
+    }
     
     if (gameMode !== 'pvc' || toMove !== computerColor || gameStatus === 'checkmate' || gameStatus === 'stalemate') {
       console.log('⏸️ Computer move blocked:', {
@@ -786,21 +825,36 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
       return;
     }
 
+    // Set thinking flag
+    isComputerThinkingRef.current = true;
     console.log('✅ Computer is calculating move...');
 
     // INP optimization: Delay so player can see the board state before computer moves
     // Use setTimeout to avoid blocking the main thread
     setTimeout(async () => {
+      console.log('🔧 Starting AI calculation...', { useAdvancedAI, computerColor, difficulty });
+      
       // Yield to browser before heavy AI calculation
       await new Promise(resolve => setTimeout(resolve, 0));
       
       // Choose AI engine based on setting
-      const bestMove = useAdvancedAI 
-        ? await selectBestMoveAdvanced(piecesRef.current, computerColor, difficulty, true, moveHistoryRef.current) // Enable NN + Opening Book
-        : selectBestMove(piecesRef.current, computerColor, difficulty);
+      let bestMove;
+      try {
+        console.log('🤖 Calling AI function...');
+        bestMove = useAdvancedAI 
+          ? await selectBestMoveAdvanced(piecesRef.current, computerColor, difficulty, true, moveHistoryRef.current) // Enable NN + Opening Book
+          : selectBestMove(piecesRef.current, computerColor, difficulty);
+        console.log('🔍 AI returned:', bestMove);
+      } catch (error) {
+        console.error('❌ AI calculation error:', error);
+        isComputerThinkingRef.current = false; // Clear thinking flag
+        return;
+      }
       
       if (!bestMove) {
         console.log('❌ Computer has no legal moves - should be checkmate or stalemate');
+        console.log('Current pieces:', Array.from(piecesRef.current.entries()).filter(([k, p]) => p.color === computerColor));
+        isComputerThinkingRef.current = false; // Clear thinking flag
         return;
       }
 
@@ -811,6 +865,7 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
       
       if (!piece) {
         console.error('❌ Piece not found at', fromKey, 'Available pieces:', Array.from(piecesRef.current.keys()));
+        isComputerThinkingRef.current = false; // Clear thinking flag
         return;
       }
 
@@ -828,6 +883,7 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
         // CRITICAL: Cannot capture the king
         if (capturedPiece.type === 'king') {
           console.error('🚨 AI ILLEGAL MOVE: Cannot capture king directly! This indicates checkmate was not detected.');
+          isComputerThinkingRef.current = false; // Clear thinking flag
           return;
         }
         
@@ -854,6 +910,9 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
 
       console.log('🎉 Computer move completed. Next player:', nextPlayer, 'Game status:', gameStatus);
 
+      // Clear thinking flag
+      isComputerThinkingRef.current = false;
+
       // Trigger animation
       animationRef.current = {
         startTime: Date.now(),
@@ -865,7 +924,11 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
         level: to.z,
       };
 
-      setVersion((v) => v + 1);
+      console.log('🔄 Calling setVersion to trigger redraw');
+      setVersion((v) => {
+        console.log('🔄 setVersion called, version:', v, '→', v + 1);
+        return v + 1;
+      });
     }, 500);
   }, [gameMode, toMove, computerColor, difficulty, gameStatus, useAdvancedAI, checkGameStatus, captureState]);
 
@@ -1197,7 +1260,9 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
           setMoveHistory((h) => [...h, { from: sel.pos, to, piece: movedPiece.type, pieceColor: movedPiece.color, capColor: capturedColor, capType: capturedType }]);
           const nextPlayer = toMove === 'white' ? 'black' : 'white';
           console.log(`🎯 Player move complete: ${toMove} → ${nextPlayer}, checking game status...`);
+          console.log(`🔄 About to call setToMove("${nextPlayer}") - Current toMove: "${toMove}"`);
           setToMove(nextPlayer);
+          console.log(`✅ setToMove called with "${nextPlayer}"`);
           checkGameStatus(nextPlayer);
           console.log(`✅ Turn changed to ${nextPlayer}, gameStatus will be checked`);
           
@@ -1392,6 +1457,7 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
 
   // Trigger computer move when it's computer's turn
   useEffect(() => {
+    console.log('🔄 useEffect triggered - checking if computer should move');
     const check1 = gameMode === 'pvc';
     const check2 = toMove === computerColor;
     const check3 = !promotionPending;
@@ -1400,6 +1466,7 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
     const shouldMove = check1 && check2 && check3 && check4 && check5;
     
     console.log(`🔔 Computer move check: gameMode="${gameMode}" toMove="${toMove}" computerColor="${computerColor}" promotion=${promotionPending} status="${gameStatus}"`);
+    console.log(`📊 Checks: mode=${check1} turn=${check2} noProm=${check3} notMate=${check4} notStale=${check5}`);
     
     // DEBUG: Show alert when check detected
     if (gameMode === 'pvc' && toMove === computerColor && gameStatus === 'check') {
@@ -1564,10 +1631,22 @@ const ThreeDChessBoard = ({ size = 8, levels = 3, canvasSize = 240, showControlP
                 {useAdvancedAI && <option value="master">🎯 Master</option>}
               </select>
               <label style={{ marginRight: 8 }}>Computer plays:</label>
-              <select value={computerColor} onChange={(e) => setComputerColor(e.target.value)}>
+              <select value={computerColor} onChange={(e) => {
+                const newColor = e.target.value;
+                console.log('🎨 Computer color changed from', computerColor, 'to', newColor);
+                setComputerColor(newColor);
+                // Force immediate update and move check
+                setTimeout(() => {
+                  console.log('🔄 Triggering move check after color change');
+                  setVersion(v => v + 1);
+                }, 100);
+              }}>
                 <option value="black">Black</option>
                 <option value="white">White</option>
               </select>
+              <div style={{ fontSize: '10px', color: '#666', marginTop: '2px' }}>
+                Current: {computerColor}
+              </div>
             </>
           )}
         </div>
