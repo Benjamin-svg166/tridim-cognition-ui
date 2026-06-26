@@ -577,11 +577,13 @@ export default function NineDVisualizer() {
 
         {/* Controls */}
         <OrbitControls
+          makeDefault
           enablePan={true}
           enableZoom={true}
           enableRotate={true}
           minDistance={8}
           maxDistance={40}
+          touches={{ ONE: 0, TWO: 2 }}
         />
       </Canvas>
     </div>

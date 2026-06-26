@@ -494,10 +494,12 @@ export default function ThreeDVisualizer() {
 
         {/* Orbit Controls - allows 360° rotation */}
         <OrbitControls 
+          makeDefault
           enableDamping 
           dampingFactor={0.05}
           minDistance={5}
           maxDistance={30}
+          touches={{ ONE: 0, TWO: 2 }}
         />
 
         {/* Three Chess Boards */}

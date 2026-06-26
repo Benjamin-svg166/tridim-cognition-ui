@@ -770,10 +770,12 @@ const NineDChessGame3D = () => {
           <CoordinateLabels3D />
           
           <OrbitControls 
+            makeDefault
             enableDamping={true}
             dampingFactor={0.05}
             minDistance={10}
             maxDistance={50}
+            touches={{ ONE: 0, TWO: 2 }}
           />
         </Canvas>
 

@@ -829,10 +829,12 @@ const ThreeDChessGame = () => {
           ))}
 
           <OrbitControls
+            makeDefault
             enableDamping
             dampingFactor={0.05}
             minDistance={8}
             maxDistance={25}
+            touches={{ ONE: 0, TWO: 2 }}
           />
         </Canvas>
       </div>
