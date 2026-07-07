@@ -1,0 +1,24 @@
+{
+  "name": "sapience-system",
+  "version": "1.0.0",
+  "description": "Sapience Engine for 9D Chess - Self-aware AI with abstract reasoning and meta-cognition",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node src/test/testSapience.js",
+    "demo": "node src/demo/sapienceDemoSession.js"
+  },
+  "keywords": [
+    "sapience",
+    "consciousness",
+    "self-awareness",
+    "meta-cognition",
+    "9D-chess",
+    "abstract-reasoning"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}
