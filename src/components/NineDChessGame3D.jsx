@@ -5,7 +5,7 @@ import { isValidMove, isPathClear, canPromote, wouldBeInCheckAfterMove, isInChec
 import { selectBestMove, evaluatePosition } from './nineDChessAI';
 import { selectBestMoveAdvanced } from './nineDChessAI_advanced';
 import PromotionModal from './PromotionModal';
-import { SapienceEngine } from '../../sapience-system/src/index.js';
+import { SapienceEngine } from '../sapience-system/src/index.js';
 
 /**
  * 9D Chess - Full 3D Playable Game
