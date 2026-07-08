@@ -222,8 +222,28 @@ const getAllLegalMovesForSapience = (piecesMap, color) => {
     
     const [x, y, z] = key.split(',').map(Number);
     
-    // Ensure piece.type is a string
-    const pieceType = typeof piece.type === 'string' ? piece.type : String(piece.type);
+    // Robust piece type extraction with validation
+    let pieceType;
+    if (!piece || !piece.type) {
+      console.warn(`⚠️ Invalid piece at ${key}:`, piece);
+      return;
+    }
+    
+    if (typeof piece.type === 'string') {
+      pieceType = piece.type;
+    } else if (typeof piece.type === 'object' && piece.type !== null) {
+      // If it's an object, try to extract a string representation
+      console.warn(`⚠️ piece.type is an object at ${key}:`, piece.type);
+      pieceType = piece.type.toString ? piece.type.toString() : String(piece.type);
+    } else {
+      pieceType = String(piece.type);
+    }
+    
+    // Verify it's actually a string now
+    if (typeof pieceType !== 'string') {
+      console.error(`❌ Failed to convert piece.type to string at ${key}:`, piece.type, typeof piece.type);
+      return;
+    }
     
     // Check all possible destination squares
     for (let tx = 0; tx < 8; tx++) {
@@ -232,21 +252,26 @@ const getAllLegalMovesForSapience = (piecesMap, color) => {
           const toPos = { x: tx, y: ty, z: tz };
           const fromPos = { x, y, z };
           
-          if (isValidMove(fromPos, toPos, pieceType, piece.color, piecesMap, false, null) &&
-              isPathClear(fromPos, toPos, pieceType, piecesMap) &&
-              !wouldBeInCheckAfterMove(fromPos, toPos, piece.color, piecesMap)) {
-            moves.push({
-              from: fromPos,
-              to: toPos,
-              piece: pieceType,
-              color: piece.color,
-              description: `${pieceType} from (${x},${y},${z}) to (${tx},${ty},${tz})`
-            });
+          try {
+            if (isValidMove(fromPos, toPos, pieceType, piece.color, piecesMap, false, null) &&
+                isPathClear(fromPos, toPos, pieceType, piecesMap) &&
+                !wouldBeInCheckAfterMove(fromPos, toPos, piece.color, piecesMap)) {
+              moves.push({
+                from: fromPos,
+                to: toPos,
+                piece: pieceType,
+                color: piece.color,
+                description: `${pieceType} from (${x},${y},${z}) to (${tx},${ty},${tz})`
+              });
+            }
+          } catch (error) {
+            console.error(`❌ Error checking move for ${pieceType} at ${key}:`, error);
           }
         }
       }
     }
   });
+  console.log(`✅ Generated ${moves.length} legal moves for ${color}`);
   return moves;
 };
 
@@ -624,6 +649,15 @@ const NineDChessGame3D = () => {
           
           // Get all legal moves
           console.log('🔍 Getting legal moves for', computerColor);
+          console.log('📊 Sample pieces from map:');
+          let sampleCount = 0;
+          piecesRef.current.forEach((piece, key) => {
+            if (sampleCount < 3 && piece.color === computerColor) {
+              console.log(`  - ${key}:`, piece, 'type:', piece.type, 'typeof:', typeof piece.type);
+              sampleCount++;
+            }
+          });
+          
           const legalMoves = getAllLegalMovesForSapience(piecesRef.current, computerColor);
           console.log('✅ Found', legalMoves.length, 'legal moves');
           
