@@ -267,7 +267,27 @@ const getAllLegalMovesForSapience = (piecesMap, color) => {
           const fromPos = { x, y, z };
           
           try {
-            if (isValidMove(fromPos, toPos, pieceType, piece.color, piecesMap, false, null) &&
+            // Debug: log what we're about to pass to isValidMove (only for first piece)
+            if (matchingColorCount === 1 && validMoveCount === 0) {
+              console.log(`🔍 About to call isValidMove with:`, {
+                fromPos, toPos, pieceType, 
+                pieceType_type: typeof pieceType,
+                pieceType_value: pieceType,
+                color: piece.color,
+                hasMap: !!piecesMap
+              });
+            }
+            
+            // Determine if this is a capture move
+            const targetKey = `${tx},${ty},${tz}`;
+            const targetPiece = piecesMap.get(targetKey);
+            const isCapture = targetPiece && targetPiece.color !== piece.color;
+            
+            // Check if piece has moved (for pawn double-move logic)
+            const hasMoved = z !== (piece.color === 'white' ? 1 : 6); // Simplified check
+            
+            // FIX: Correct parameter order for isValidMove
+            if (isValidMove(pieceType, fromPos, toPos, piece.color, isCapture, hasMoved) &&
                 isPathClear(fromPos, toPos, pieceType, piecesMap) &&
                 !wouldBeInCheckAfterMove(fromPos, toPos, piece.color, piecesMap)) {
               validMoveCount++;
