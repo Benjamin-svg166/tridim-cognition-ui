@@ -288,7 +288,7 @@ const getAllLegalMovesForSapience = (piecesMap, color) => {
             
             // FIX: Correct parameter order for isValidMove
             if (isValidMove(pieceType, fromPos, toPos, piece.color, isCapture, hasMoved) &&
-                isPathClear(fromPos, toPos, pieceType, piecesMap) &&
+                isPathClear(piecesMap, fromPos, toPos, pieceType) &&
                 !wouldBeInCheckAfterMove(fromPos, toPos, piece.color, piecesMap)) {
               validMoveCount++;
               moves.push({
