@@ -222,6 +222,9 @@ const getAllLegalMovesForSapience = (piecesMap, color) => {
     
     const [x, y, z] = key.split(',').map(Number);
     
+    // Ensure piece.type is a string
+    const pieceType = typeof piece.type === 'string' ? piece.type : String(piece.type);
+    
     // Check all possible destination squares
     for (let tx = 0; tx < 8; tx++) {
       for (let ty = 0; ty < 8; ty++) {
@@ -229,15 +232,15 @@ const getAllLegalMovesForSapience = (piecesMap, color) => {
           const toPos = { x: tx, y: ty, z: tz };
           const fromPos = { x, y, z };
           
-          if (isValidMove(fromPos, toPos, piece.type, piece.color, piecesMap, false, null) &&
-              isPathClear(fromPos, toPos, piece.type, piecesMap) &&
+          if (isValidMove(fromPos, toPos, pieceType, piece.color, piecesMap, false, null) &&
+              isPathClear(fromPos, toPos, pieceType, piecesMap) &&
               !wouldBeInCheckAfterMove(fromPos, toPos, piece.color, piecesMap)) {
             moves.push({
               from: fromPos,
               to: toPos,
-              piece: piece.type,
+              piece: pieceType,
               color: piece.color,
-              description: `${piece.type} from (${x},${y},${z}) to (${tx},${ty},${tz})`
+              description: `${pieceType} from (${x},${y},${z}) to (${tx},${ty},${tz})`
             });
           }
         }
@@ -613,21 +616,46 @@ const NineDChessGame3D = () => {
       if (useSapienceSystem && sapienceEngineRef.current) {
         console.log('🧠 Using Sapience System for move selection...');
         
-        // Convert pieces map to 9D board format for sapience
-        const board9D = convertPiecesToBoard9D(piecesRef.current);
-        
-        // Get all legal moves
-        const legalMoves = getAllLegalMovesForSapience(piecesRef.current, computerColor);
-        
-        if (legalMoves.length > 0) {
-          // Use sapience for move selection with full reasoning
-          const sapienceDecision = sapienceEngineRef.current.selectMove(board9D, legalMoves);
+        try {
+          // Convert pieces map to 9D board format for sapience
+          console.log('🔄 Converting board to 9D format...');
+          const board9D = convertPiecesToBoard9D(piecesRef.current);
+          console.log('✅ Board converted, pieces count:', piecesRef.current.size);
           
-          // Display sapient analysis
-          setSapientAnalysis(sapienceDecision);
-          console.log('🧠 Sapient Analysis:', sapienceDecision.reasoning);
+          // Get all legal moves
+          console.log('🔍 Getting legal moves for', computerColor);
+          const legalMoves = getAllLegalMovesForSapience(piecesRef.current, computerColor);
+          console.log('✅ Found', legalMoves.length, 'legal moves');
           
-          move = sapienceDecision.move;
+          if (legalMoves.length > 0) {
+            // Use sapience for move selection with full reasoning
+            console.log('🧠 Calling Sapience Engine selectMove...');
+            const sapienceDecision = sapienceEngineRef.current.selectMove(board9D, legalMoves);
+            console.log('✅ Sapience decision received:', sapienceDecision);
+            
+            // Display sapient analysis
+            setSapientAnalysis({
+              confidence: sapienceDecision.confidence,
+              reasoning: sapienceDecision.reasoning,
+              explanation: sapienceDecision.explanation,
+              strategicIntent: sapienceDecision.strategicIntent,
+              uncertainty: sapienceDecision.uncertainty,
+              alternatives: sapienceDecision.alternatives
+            });
+            console.log('🧠 Sapient Analysis:', sapienceDecision.reasoning);
+            
+            move = sapienceDecision.move;
+            console.log('🎯 Selected move:', move);
+          } else {
+            console.warn('⚠️ No legal moves found! Falling back to traditional AI');
+            move = selectBestMove(piecesRef.current, computerColor, difficulty);
+          }
+        } catch (error) {
+          console.error('❌ Error in Sapience System:', error);
+          console.error('Stack trace:', error.stack);
+          // Fall back to traditional AI on error
+          console.log('🔄 Falling back to traditional AI due to error');
+          move = selectBestMove(piecesRef.current, computerColor, difficulty);
         }
       } else {
         // Use traditional AI
