@@ -216,9 +216,18 @@ const convertPiecesToBoard9D = (piecesMap) => {
 };
 
 const getAllLegalMovesForSapience = (piecesMap, color) => {
+  console.log(`🔍 getAllLegalMovesForSapience called for ${color}, map size:`, piecesMap.size);
   const moves = [];
+  let pieceCount = 0;
+  let matchingColorCount = 0;
   piecesMap.forEach((piece, key) => {
+    pieceCount++;
     if (piece.color !== color) return;
+    matchingColorCount++;
+    
+    if (matchingColorCount <= 2) {
+      console.log(`  Piece ${matchingColorCount} at ${key}:`, piece, 'type:', piece.type, 'typeof type:', typeof piece.type);
+    }
     
     const [x, y, z] = key.split(',').map(Number);
     
@@ -245,7 +254,12 @@ const getAllLegalMovesForSapience = (piecesMap, color) => {
       return;
     }
     
+    if (matchingColorCount <= 2) {
+      console.log(`  ✅ ${key} pieceType is valid string: "${pieceType}"`);
+    }
+    
     // Check all possible destination squares
+    let validMoveCount = 0;
     for (let tx = 0; tx < 8; tx++) {
       for (let ty = 0; ty < 8; ty++) {
         for (let tz = 0; tz < 9; tz++) {
@@ -256,6 +270,7 @@ const getAllLegalMovesForSapience = (piecesMap, color) => {
             if (isValidMove(fromPos, toPos, pieceType, piece.color, piecesMap, false, null) &&
                 isPathClear(fromPos, toPos, pieceType, piecesMap) &&
                 !wouldBeInCheckAfterMove(fromPos, toPos, piece.color, piecesMap)) {
+              validMoveCount++;
               moves.push({
                 from: fromPos,
                 to: toPos,
@@ -270,7 +285,11 @@ const getAllLegalMovesForSapience = (piecesMap, color) => {
         }
       }
     }
+    if (matchingColorCount <= 2) {
+      console.log(`  📍 ${key} (${pieceType}): found ${validMoveCount} valid moves`);
+    }
   });
+  console.log(`📊 Processed ${pieceCount} total pieces, ${matchingColorCount} matching ${color}`);
   console.log(`✅ Generated ${moves.length} legal moves for ${color}`);
   return moves;
 };
