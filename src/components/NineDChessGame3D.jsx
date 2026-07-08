@@ -5,6 +5,7 @@ import { isValidMove, isPathClear, canPromote, wouldBeInCheckAfterMove, isInChec
 import { selectBestMove, evaluatePosition } from './nineDChessAI';
 import { selectBestMoveAdvanced } from './nineDChessAI_advanced';
 import PromotionModal from './PromotionModal';
+import { SapienceEngine } from '../../sapience-system/src/index.js';
 
 /**
  * 9D Chess - Full 3D Playable Game
@@ -188,6 +189,64 @@ function CoordinateLabels3D() {
   return <group>{labels}</group>;
 }
 
+// Helper functions for Sapience System integration
+const convertPiecesToBoard9D = (piecesMap) => {
+  // Convert pieces Map to 9D board array [z][y][x]
+  const board = [];
+  for (let z = 0; z < 9; z++) {
+    const level = [];
+    for (let y = 0; y < 8; y++) {
+      const row = [];
+      for (let x = 0; x < 8; x++) {
+        const key = `${x},${y},${z}`;
+        const piece = piecesMap.get(key);
+        if (piece) {
+          // Convert to chess notation (K, Q, R, B, N, P for white, lowercase for black)
+          const symbol = piece.type.charAt(0).toUpperCase();
+          row.push(piece.color === 'white' ? symbol : symbol.toLowerCase());
+        } else {
+          row.push(null);
+        }
+      }
+      level.push(row);
+    }
+    board.push(level);
+  }
+  return board;
+};
+
+const getAllLegalMovesForSapience = (piecesMap, color) => {
+  const moves = [];
+  piecesMap.forEach((piece, key) => {
+    if (piece.color !== color) return;
+    
+    const [x, y, z] = key.split(',').map(Number);
+    
+    // Check all possible destination squares
+    for (let tx = 0; tx < 8; tx++) {
+      for (let ty = 0; ty < 8; ty++) {
+        for (let tz = 0; tz < 9; tz++) {
+          const toPos = { x: tx, y: ty, z: tz };
+          const fromPos = { x, y, z };
+          
+          if (isValidMove(fromPos, toPos, piece.type, piece.color, piecesMap, false, null) &&
+              isPathClear(fromPos, toPos, piece.type, piecesMap) &&
+              !wouldBeInCheckAfterMove(fromPos, toPos, piece.color, piecesMap)) {
+            moves.push({
+              from: fromPos,
+              to: toPos,
+              piece: piece.type,
+              color: piece.color,
+              description: `${piece.type} from (${x},${y},${z}) to (${tx},${ty},${tz})`
+            });
+          }
+        }
+      }
+    }
+  });
+  return moves;
+};
+
 // Main Game Component
 const NineDChessGame3D = () => {
   const piecesRef = useRef(new Map());
@@ -220,6 +279,12 @@ const NineDChessGame3D = () => {
     const saved = localStorage.getItem('9dchess_useAdvancedAI');
     return saved !== null ? JSON.parse(saved) : true;
   });
+  const [useSapienceSystem, setUseSapienceSystem] = useState(() => {
+    const saved = localStorage.getItem('9dchess_useSapienceSystem');
+    return saved !== null ? JSON.parse(saved) : false;
+  });
+  const sapienceEngineRef = useRef(null);
+  const [sapientAnalysis, setSapientAnalysis] = useState(null);
   
   // Advanced features
   const [positionEvaluation, setPositionEvaluation] = useState(0);
@@ -292,6 +357,23 @@ const NineDChessGame3D = () => {
   useEffect(() => {
     localStorage.setItem('9dchess_useAdvancedAI', JSON.stringify(useAdvancedAI));
   }, [useAdvancedAI]);
+
+  // Initialize Sapience Engine
+  useEffect(() => {
+    if (useSapienceSystem && !sapienceEngineRef.current) {
+      console.log('🧠 Initializing Sapience Engine for 9D Chess...');
+      sapienceEngineRef.current = new SapienceEngine({
+        verbosity: 'medium',
+        explanationDepth: 'high',
+        confidenceThreshold: 0.70
+      });
+      console.log('✅ Sapience Engine activated');
+    }
+  }, [useSapienceSystem]);
+
+  useEffect(() => {
+    localStorage.setItem('9dchess_useSapienceSystem', JSON.stringify(useSapienceSystem));
+  }, [useSapienceSystem]);
 
   // Calculate material count
   const calculateMaterial = useCallback(() => {
@@ -525,9 +607,34 @@ const NineDChessGame3D = () => {
     console.log('✅ [9D] Computer is calculating move...');
     
     try {
-      const move = useAdvancedAI && (difficulty === 'hard' || difficulty === 'master')
-        ? await selectBestMoveAdvanced(piecesRef.current, computerColor, difficulty)
-        : selectBestMove(piecesRef.current, computerColor, difficulty);
+      let move;
+      
+      // Use Sapience System if enabled
+      if (useSapienceSystem && sapienceEngineRef.current) {
+        console.log('🧠 Using Sapience System for move selection...');
+        
+        // Convert pieces map to 9D board format for sapience
+        const board9D = convertPiecesToBoard9D(piecesRef.current);
+        
+        // Get all legal moves
+        const legalMoves = getAllLegalMovesForSapience(piecesRef.current, computerColor);
+        
+        if (legalMoves.length > 0) {
+          // Use sapience for move selection with full reasoning
+          const sapienceDecision = sapienceEngineRef.current.selectMove(board9D, legalMoves);
+          
+          // Display sapient analysis
+          setSapientAnalysis(sapienceDecision);
+          console.log('🧠 Sapient Analysis:', sapienceDecision.reasoning);
+          
+          move = sapienceDecision.move;
+        }
+      } else {
+        // Use traditional AI
+        move = useAdvancedAI && (difficulty === 'hard' || difficulty === 'master')
+          ? await selectBestMoveAdvanced(piecesRef.current, computerColor, difficulty)
+          : selectBestMove(piecesRef.current, computerColor, difficulty);
+      }
 
       console.log('🔍 [9D] AI returned move:', move);
 
@@ -549,7 +656,7 @@ const NineDChessGame3D = () => {
       isComputerThinkingRef.current = false;
       console.log('🔓 [9D] Thinking lock released');
     }
-  }, [useAdvancedAI, difficulty, computerColor, executeMove]);
+  }, [useAdvancedAI, difficulty, computerColor, executeMove, useSapienceSystem]);
 
   // AI move
   useEffect(() => {
@@ -959,6 +1066,47 @@ const NineDChessGame3D = () => {
                   {' '}Use Advanced AI (Minimax)
                 </label>
               </div>
+              <div style={{ marginTop: '10px' }}>
+                <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={useSapienceSystem} 
+                    onChange={(e) => setUseSapienceSystem(e.target.checked)}
+                    style={{ marginRight: '8px' }}
+                  />
+                  <span style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '5px',
+                    color: useSapienceSystem ? '#4caf50' : 'inherit'
+                  }}>
+                    🧠 Use Sapience System
+                    {useSapienceSystem && (
+                      <span style={{ 
+                        fontSize: '10px', 
+                        background: '#4caf50', 
+                        color: 'white',
+                        padding: '2px 6px',
+                        borderRadius: '10px',
+                        fontWeight: 'bold'
+                      }}>
+                        ACTIVE
+                      </span>
+                    )}
+                  </span>
+                </label>
+                {useSapienceSystem && (
+                  <div style={{ 
+                    fontSize: '10px', 
+                    color: '#aaa', 
+                    marginTop: '5px',
+                    marginLeft: '20px',
+                    fontStyle: 'italic'
+                  }}>
+                    Self-aware AI with meta-cognition and natural language reasoning
+                  </div>
+                )}
+              </div>
             </>
           )}
         </div>
@@ -987,6 +1135,45 @@ const NineDChessGame3D = () => {
             {positionEvaluation > 0 ? `White +${positionEvaluation.toFixed(1)}` : positionEvaluation < 0 ? `Black +${Math.abs(positionEvaluation).toFixed(1)}` : 'Equal'}
           </div>
         </div>
+
+        {/* Sapient Analysis Display */}
+        {useSapienceSystem && sapientAnalysis && (
+          <div style={{ marginBottom: '20px', padding: '15px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', borderRadius: '8px' }}>
+            <h3 style={{ margin: '0 0 10px 0', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              🧠 Sapient Analysis
+            </h3>
+            
+            <div style={{ fontSize: '12px', marginBottom: '8px' }}>
+              <strong>Confidence:</strong> {(sapientAnalysis.confidence * 100).toFixed(1)}%
+            </div>
+            
+            {sapientAnalysis.strategicIntent && (
+              <div style={{ fontSize: '12px', marginBottom: '8px', background: 'rgba(255,255,255,0.1)', padding: '8px', borderRadius: '5px' }}>
+                <strong>Strategic Intent:</strong><br />
+                {sapientAnalysis.strategicIntent}
+              </div>
+            )}
+            
+            {sapientAnalysis.reasoning && (
+              <div style={{ fontSize: '11px', marginTop: '8px', background: 'rgba(0,0,0,0.2)', padding: '8px', borderRadius: '5px', maxHeight: '120px', overflowY: 'auto' }}>
+                <strong>Reasoning:</strong><br />
+                {sapientAnalysis.reasoning}
+              </div>
+            )}
+            
+            {sapientAnalysis.uncertainty && (
+              <div style={{ fontSize: '10px', marginTop: '8px', background: '#ff9800', color: 'white', padding: '6px', borderRadius: '5px', fontWeight: 'bold' }}>
+                ⚠️ AI recognizes uncertainty in this position
+              </div>
+            )}
+            
+            {sapientAnalysis.alternatives && sapientAnalysis.alternatives.length > 0 && (
+              <div style={{ fontSize: '10px', marginTop: '8px', color: '#ddd' }}>
+                <strong>Also considered:</strong> {sapientAnalysis.alternatives.length} alternative moves
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Material Count */}
         <div style={{ marginBottom: '20px', padding: '15px', background: '#383838', borderRadius: '8px' }}>
