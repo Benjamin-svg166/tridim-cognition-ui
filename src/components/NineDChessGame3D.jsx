@@ -442,6 +442,39 @@ const NineDChessGame3D = () => {
     localStorage.setItem('9dchess_useSapienceSystem', JSON.stringify(useSapienceSystem));
   }, [useSapienceSystem]);
 
+  // Live Position Analysis - Updates continuously when Sapience is active
+  useEffect(() => {
+    if (!useSapienceSystem || !sapienceEngineRef.current || piecesRef.current.size === 0) {
+      return;
+    }
+
+    // Debounce analysis to avoid excessive computation
+    const analysisTimer = setTimeout(() => {
+      try {
+        console.log('📊 Running live position analysis...');
+        const board9D = convertPiecesToBoard9D(piecesRef.current);
+        const analysis = sapienceEngineRef.current.analyzePosition(board9D);
+        
+        // Create live commentary based on current position
+        setSapientAnalysis({
+          confidence: analysis.confidence,
+          reasoning: analysis.explanation || 'Analyzing current position...',
+          explanation: `Current position from ${toMoveRef.current}'s perspective`,
+          strategicIntent: analysis.concepts?.[0] || 'Evaluating strategic options',
+          uncertainty: analysis.confidence < 0.6,
+          alternatives: analysis.alternatives || [],
+          isLiveAnalysis: true // Flag to indicate this is continuous analysis
+        });
+        
+        console.log('✅ Live analysis updated');
+      } catch (error) {
+        console.error('Error in live position analysis:', error);
+      }
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(analysisTimer);
+  }, [useSapienceSystem, version, toMove]); // Re-run when board changes
+
   // Calculate material count
   const calculateMaterial = useCallback(() => {
     const values = { pawn: 1, knight: 3, bishop: 3, rook: 5, queen: 9, king: 0 };
@@ -706,14 +739,15 @@ const NineDChessGame3D = () => {
             const sapienceDecision = sapienceEngineRef.current.selectMove(board9D, legalMoves);
             console.log('✅ Sapience decision received:', sapienceDecision);
             
-            // Display sapient analysis
+            // Display sapient analysis for AI move
             setSapientAnalysis({
               confidence: sapienceDecision.confidence,
               reasoning: sapienceDecision.reasoning,
               explanation: sapienceDecision.explanation,
               strategicIntent: sapienceDecision.strategicIntent,
               uncertainty: sapienceDecision.uncertainty,
-              alternatives: sapienceDecision.alternatives
+              alternatives: sapienceDecision.alternatives,
+              isLiveAnalysis: false // This is AI move analysis, not live commentary
             });
             console.log('🧠 Sapient Analysis:', sapienceDecision.reasoning);
             
@@ -1237,38 +1271,61 @@ const NineDChessGame3D = () => {
           </div>
         </div>
 
-        {/* Sapient Analysis Display */}
+        {/* Sapient Analysis Display - Live Commentary */}
         {useSapienceSystem && sapientAnalysis && (
-          <div style={{ marginBottom: '20px', padding: '15px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', borderRadius: '8px' }}>
+          <div style={{ 
+            marginBottom: '20px', 
+            padding: '15px', 
+            background: sapientAnalysis.isLiveAnalysis 
+              ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' 
+              : 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
+            borderRadius: '8px',
+            border: '2px solid rgba(255, 255, 255, 0.3)',
+            boxShadow: '0 4px 15px rgba(0, 0, 0, 0.3)'
+          }}>
             <h3 style={{ margin: '0 0 10px 0', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              🧠 Sapient Analysis
+              🧠 {sapientAnalysis.isLiveAnalysis ? 'Live Commentary' : 'AI Move Analysis'}
+              {sapientAnalysis.isLiveAnalysis && (
+                <span style={{
+                  fontSize: '10px',
+                  background: 'rgba(255, 255, 255, 0.3)',
+                  padding: '2px 6px',
+                  borderRadius: '10px',
+                  fontWeight: 'bold',
+                  animation: 'pulse 2s infinite'
+                }}>
+                  LIVE
+                </span>
+              )}
             </h3>
             
             <div style={{ fontSize: '12px', marginBottom: '8px' }}>
               <strong>Confidence:</strong> {(sapientAnalysis.confidence * 100).toFixed(1)}%
+              {sapientAnalysis.confidence > 0.8 && ' 🎯'}
+              {sapientAnalysis.confidence < 0.5 && ' ⚠️'}
             </div>
             
             {sapientAnalysis.strategicIntent && (
-              <div style={{ fontSize: '12px', marginBottom: '8px', background: 'rgba(255,255,255,0.1)', padding: '8px', borderRadius: '5px' }}>
-                <strong>Strategic Intent:</strong><br />
+              <div style={{ fontSize: '12px', marginBottom: '8px', background: 'rgba(255,255,255,0.15)', padding: '8px', borderRadius: '5px' }}>
+                <strong>Strategic Assessment:</strong><br />
                 {sapientAnalysis.strategicIntent}
               </div>
             )}
             
             {sapientAnalysis.reasoning && (
-              <div style={{ fontSize: '11px', marginTop: '8px', background: 'rgba(0,0,0,0.2)', padding: '8px', borderRadius: '5px', maxHeight: '120px', overflowY: 'auto' }}>
-                <strong>Reasoning:</strong><br />
+              <div style={{ fontSize: '11px', marginTop: '8px', background: 'rgba(0,0,0,0.25)', padding: '8px', borderRadius: '5px', maxHeight: '150px', overflowY: 'auto' }}>
+                <strong>Analysis:</strong><br />
                 {sapientAnalysis.reasoning}
               </div>
             )}
             
             {sapientAnalysis.uncertainty && (
               <div style={{ fontSize: '10px', marginTop: '8px', background: '#ff9800', color: 'white', padding: '6px', borderRadius: '5px', fontWeight: 'bold' }}>
-                ⚠️ AI recognizes uncertainty in this position
+                ⚠️ High uncertainty detected - complex position
               </div>
             )}
             
-            {sapientAnalysis.alternatives && sapientAnalysis.alternatives.length > 0 && (
+            {sapientAnalysis.alternatives && sapientAnalysis.alternatives.length > 0 && !sapientAnalysis.isLiveAnalysis && (
               <div style={{ fontSize: '10px', marginTop: '8px', color: '#ddd' }}>
                 <strong>Also considered:</strong> {sapientAnalysis.alternatives.length} alternative moves
               </div>
