@@ -1,5 +1,15 @@
 // Advanced Chess AI for 9D Chess with Minimax and Alpha-Beta Pruning
 import { isValidMove, isPathClear, wouldBeInCheckAfterMove, isInCheck } from './nineDChessUtils';
+import { 
+  evaluateKingSafety9D, 
+  evaluateDimensionalConnectivity, 
+  evaluateRookControl9D,
+  convertPiecesMapToBoard9D,
+  isSquareAttacked 
+} from './nineDChessAI';
+
+// Re-export these for use in this file if they're not available
+// (We'll add a fallback implementation if the import fails)
 
 // Evaluation weights for 9D chess
 export const evaluationWeights = {
@@ -109,6 +119,14 @@ export function evaluatePositionAdvanced(piecesMap, color, depth = 0) {
   let whiteDevelopment = 0;
   let blackDevelopment = 0;
   
+  // Convert for geometric analysis
+  const pieces = Array.from(piecesMap.values());
+  const board9D = convertPiecesMapToBoard9D(piecesMap);
+  
+  // Find kings
+  const whiteKing = pieces.find(p => p.type === 'king' && p.color === 'white');
+  const blackKing = pieces.find(p => p.type === 'king' && p.color === 'black');
+  
   piecesMap.forEach((piece) => {
     const materialValue = evaluationWeights.material[piece.type] || 0;
     const positionValue = getPiecePositionValue(piece.type, piece.pos, piece.color);
@@ -145,6 +163,45 @@ export function evaluatePositionAdvanced(piecesMap, color, depth = 0) {
   if (isInCheck(piecesMap, color === 'white' ? 'black' : 'white')) {
     score += evaluationWeights.checkBonus;
   }
+  
+  // === NEW: GEOMETRIC HEURISTICS (Critical for avoiding double checkmates) ===
+  
+  // King safety evaluation
+  if (color === 'white' && whiteKing) {
+    const whiteSafety = evaluateKingSafety9D(whiteKing.pos, pieces, board9D, 'white');
+    score += whiteSafety * 0.5; // Higher weight in advanced AI
+  } else if (color === 'black' && blackKing) {
+    const blackSafety = evaluateKingSafety9D(blackKing.pos, pieces, board9D, 'black');
+    score += blackSafety * 0.5;
+  }
+  
+  // Opponent king safety (inverse)
+  if (color === 'white' && blackKing) {
+    const blackSafety = evaluateKingSafety9D(blackKing.pos, pieces, board9D, 'black');
+    score -= blackSafety * 0.5;
+  } else if (color === 'black' && whiteKing) {
+    const whiteSafety = evaluateKingSafety9D(whiteKing.pos, pieces, board9D, 'white');
+    score -= whiteSafety * 0.5;
+  }
+  
+  // Dimensional connectivity
+  const myConnectivity = evaluateDimensionalConnectivity(pieces, color);
+  const opponentConnectivity = evaluateDimensionalConnectivity(pieces, color === 'white' ? 'black' : 'white');
+  score += (myConnectivity - opponentConnectivity) * 0.3;
+  
+  // Rook control (geometric trap detection)
+  const myRooks = pieces.filter(p => p.type === 'rook' && p.color === color);
+  const opponentRooks = pieces.filter(p => p.type === 'rook' && p.color !== color);
+  const opponentKing = color === 'white' ? blackKing : whiteKing;
+  const myKing = color === 'white' ? whiteKing : blackKing;
+  
+  myRooks.forEach(rook => {
+    score += evaluateRookControl9D(rook.pos, board9D, opponentKing?.pos) * 0.3;
+  });
+  
+  opponentRooks.forEach(rook => {
+    score -= evaluateRookControl9D(rook.pos, board9D, myKing?.pos) * 0.3;
+  });
   
   return score - depth;
 }
