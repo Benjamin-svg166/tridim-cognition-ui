@@ -256,6 +256,173 @@ export function getAllLegalMovesAdvanced(piecesMap, color, size = 8, levels = 9)
   return moves;
 }
 
+// ============================================================================
+// DYNAMIC THREAT PRIORITIZATION (DTP) MODULE - Phase 2
+// ============================================================================
+
+/**
+ * Detect geometric threats in current position
+ * Returns threat level object with detailed analysis
+ */
+function detectGeometricThreats(piecesMap, color) {
+  const pieces = Array.from(piecesMap.values());
+  const board9D = convertPiecesMapToBoard9D(piecesMap);
+  const myKing = pieces.find(p => p.type === 'king' && p.color === color);
+  
+  if (!myKing) return { level: 0, kingSafety: 0, escapeRoutes: 10, verticalThreats: 0 };
+  
+  // Calculate king safety score
+  const kingSafety = evaluateKingSafety9D(myKing.pos, pieces, board9D, color);
+  
+  // Count escape routes
+  const adjacentLayers = [myKing.pos.z - 1, myKing.pos.z, myKing.pos.z + 1].filter(z => z >= 0 && z <= 8);
+  let escapeRoutes = 0;
+  
+  for (const layer of adjacentLayers) {
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        if (dx === 0 && dy === 0 && layer === myKing.pos.z) continue;
+        
+        const escapeX = myKing.pos.x + dx;
+        const escapeY = myKing.pos.y + dy;
+        
+        if (escapeX >= 0 && escapeX < 8 && escapeY >= 0 && escapeY < 8) {
+          const escapePiece = board9D[layer][escapeY][escapeX];
+          if (!escapePiece || escapePiece.color !== color) {
+            if (!isSquareAttacked(escapeX, escapeY, layer, pieces, board9D, color)) {
+              escapeRoutes++;
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  // Count vertical threats
+  let verticalThreats = 0;
+  const kz = myKing.pos.z;
+  const kx = myKing.pos.x;
+  const ky = myKing.pos.y;
+  
+  for (let checkZ = 0; checkZ <= 8; checkZ++) {
+    if (checkZ === kz) continue;
+    const piece = board9D[checkZ][ky][kx];
+    if (piece && piece.color !== color && (piece.type === 'rook' || piece.type === 'queen')) {
+      verticalThreats++;
+    }
+  }
+  
+  // Calculate overall threat level
+  let threatLevel = 0;
+  
+  if (kingSafety < -400) threatLevel = 3; // CRITICAL: Checkmate imminent
+  else if (kingSafety < -100) threatLevel = 2; // HIGH: Severe danger
+  else if (kingSafety < 0) threatLevel = 1; // MODERATE: Some danger
+  
+  if (escapeRoutes === 0) threatLevel = Math.max(threatLevel, 3);
+  else if (escapeRoutes <= 2) threatLevel = Math.max(threatLevel, 2);
+  else if (escapeRoutes <= 4) threatLevel = Math.max(threatLevel, 1);
+  
+  if (verticalThreats >= 2) threatLevel = Math.max(threatLevel, 2);
+  else if (verticalThreats >= 1) threatLevel = Math.max(threatLevel, 1);
+  
+  return {
+    level: threatLevel,
+    kingSafety,
+    escapeRoutes,
+    verticalThreats,
+    description: threatLevel === 3 ? 'CRITICAL' : 
+                 threatLevel === 2 ? 'HIGH' : 
+                 threatLevel === 1 ? 'MODERATE' : 'LOW'
+  };
+}
+
+/**
+ * Calculate adaptive search depth based on threat level
+ */
+function getAdaptiveDepth(baseDepth, threats) {
+  let depth = baseDepth;
+  
+  // Critical threats: +2 ply
+  if (threats.level === 3) {
+    depth += 2;
+  }
+  // High threats: +1 ply
+  else if (threats.level === 2) {
+    depth += 1;
+  }
+  // Moderate threats: +1 ply (50% chance to avoid performance hit)
+  else if (threats.level === 1 && Math.random() > 0.5) {
+    depth += 1;
+  }
+  
+  return depth;
+}
+
+/**
+ * Improved move ordering with threat-aware prioritization
+ */
+function orderMoves(moves, piecesMap, color, threatLevel) {
+  return moves.sort((a, b) => {
+    let scoreA = 0;
+    let scoreB = 0;
+    
+    // Priority 1: Captures (always valuable)
+    scoreA += (a.capturedValue || 0) * 10;
+    scoreB += (b.capturedValue || 0) * 10;
+    
+    // Priority 2: King moves when under threat
+    if (threatLevel >= 2) {
+      if (a.piece === 'king') scoreA += 5000;
+      if (b.piece === 'king') scoreB += 5000;
+    }
+    
+    // Priority 3: Defensive moves (pieces moving toward king)
+    const myKing = Array.from(piecesMap.values()).find(p => p.type === 'king' && p.color === color);
+    if (myKing && threatLevel >= 1) {
+      const distToKingA = Math.abs(a.to.x - myKing.pos.x) + Math.abs(a.to.y - myKing.pos.y) + Math.abs(a.to.z - myKing.pos.z);
+      const distToKingB = Math.abs(b.to.x - myKing.pos.x) + Math.abs(b.to.y - myKing.pos.y) + Math.abs(b.to.z - myKing.pos.z);
+      
+      // Closer to king = higher priority when threatened
+      scoreA += (15 - distToKingA) * 100;
+      scoreB += (15 - distToKingB) * 100;
+    }
+    
+    // Priority 4: Central control (lower priority when threatened)
+    if (threatLevel === 0) {
+      const centralityA = 7 - (Math.abs(a.to.x - 3.5) + Math.abs(a.to.y - 3.5));
+      const centralityB = 7 - (Math.abs(b.to.x - 3.5) + Math.abs(b.to.y - 3.5));
+      scoreA += centralityA * 10;
+      scoreB += centralityB * 10;
+    }
+    
+    return scoreB - scoreA;
+  });
+}
+
+/**
+ * Evaluate move safety - returns penalty if move worsens king safety
+ */
+function evaluateMoveSafety(piecesMap, move, color) {
+  const newBoard = makeMove(piecesMap, move);
+  if (!newBoard) return -10000; // Invalid move
+  
+  const threats = detectGeometricThreats(newBoard, color);
+  
+  // Heavy penalty for moves that increase danger
+  if (threats.level === 3) return -5000; // Don't walk into checkmate
+  if (threats.level === 2) return -2000; // Avoid severe danger
+  if (threats.level === 1) return -500;  // Slight penalty for risky moves
+  
+  // Bonus for improving safety
+  const currentThreats = detectGeometricThreats(piecesMap, color);
+  if (threats.level < currentThreats.level) {
+    return 1000 * (currentThreats.level - threats.level); // Reward for improving safety
+  }
+  
+  return 0;
+}
+
 /**
  * Make a move on a board copy
  */
@@ -285,20 +452,37 @@ function makeMove(piecesMap, move) {
 }
 
 /**
- * Minimax algorithm with alpha-beta pruning
+ * Minimax algorithm with alpha-beta pruning and Dynamic Threat Prioritization
  */
-async function minimax(piecesMap, depth, alpha, beta, maximizingPlayer, color, initialDepth = depth, startTime = Date.now(), maxTimeMs = 30000) {
+async function minimax(piecesMap, depth, alpha, beta, maximizingPlayer, color, initialDepth = depth, startTime = Date.now(), maxTimeMs = 30000, useDTP = true) {
   // Time limit check
   if (Date.now() - startTime > maxTimeMs) {
     return { score: evaluatePositionAdvanced(piecesMap, color), timeoutReached: true };
   }
   
-  // Base case
-  if (depth === 0) {
+  // DTP: Detect threats and adjust depth if needed
+  const currentColor = maximizingPlayer ? color : (color === 'white' ? 'black' : 'white');
+  let threats = { level: 0, escapeRoutes: 10 };
+  let adaptiveDepth = depth;
+  
+  if (useDTP) {
+    threats = detectGeometricThreats(piecesMap, currentColor);
+    
+    // Extend search depth when under threat (only at non-leaf nodes)
+    if (depth > 0 && threats.level >= 2) {
+      adaptiveDepth = getAdaptiveDepth(depth, threats);
+      
+      if (adaptiveDepth > depth && depth === initialDepth) {
+        console.log(`🛡️ DTP: Threat level ${threats.description} detected, extending depth ${depth}→${adaptiveDepth}`);
+      }
+    }
+  }
+  
+  // Base case (use adaptive depth)
+  if (adaptiveDepth === 0) {
     return { score: evaluatePositionAdvanced(piecesMap, color, depth), move: null };
   }
   
-  const currentColor = maximizingPlayer ? color : (color === 'white' ? 'black' : 'white');
   const moves = getAllLegalMovesAdvanced(piecesMap, currentColor);
   
   // Game over check
@@ -314,31 +498,41 @@ async function minimax(piecesMap, depth, alpha, beta, maximizingPlayer, color, i
     }
   }
   
-  // Sort moves (captures first)
-  moves.sort((a, b) => (b.capturedValue || 0) - (a.capturedValue || 0));
+  // DTP: Improved move ordering based on threat level
+  const orderedMoves = useDTP ? orderMoves(moves, piecesMap, currentColor, threats.level) : 
+                       moves.sort((a, b) => (b.capturedValue || 0) - (a.capturedValue || 0));
   
   if (maximizingPlayer) {
     let maxEval = -Infinity;
-    let bestMove = moves[0];
+    let bestMove = orderedMoves[0];
     let moveCounter = 0;
     
-    for (const move of moves) {
+    for (const move of orderedMoves) {
       const newBoard = makeMove(piecesMap, move);
       if (!newBoard) continue;
       
-      const evaluation = await minimax(newBoard, depth - 1, alpha, beta, false, color, initialDepth, startTime, maxTimeMs);
+      // DTP: Evaluate move safety and apply penalty/bonus
+      let safetyAdjustment = 0;
+      if (useDTP && depth === initialDepth) {
+        safetyAdjustment = evaluateMoveSafety(piecesMap, move, currentColor);
+      }
+      
+      const evaluation = await minimax(newBoard, adaptiveDepth - 1, alpha, beta, false, color, initialDepth, startTime, maxTimeMs, useDTP);
       
       if (evaluation.timeoutReached) {
         return { score: maxEval, move: bestMove, timeoutReached: true };
       }
       
-      if (evaluation.score > maxEval) {
-        maxEval = evaluation.score;
+      // Apply safety adjustment to score
+      const adjustedScore = evaluation.score + safetyAdjustment;
+      
+      if (adjustedScore > maxEval) {
+        maxEval = adjustedScore;
         bestMove = move;
       }
       
-      alpha = Math.max(alpha, evaluation.score);
-      if (beta <= alpha) break;
+      alpha = Math.max(alpha, adjustedScore);
+      if (beta <= alpha) break; // Alpha-beta pruning
       
       // Yield to browser periodically
       moveCounter++;
@@ -350,26 +544,35 @@ async function minimax(piecesMap, depth, alpha, beta, maximizingPlayer, color, i
     return { score: maxEval, move: bestMove };
   } else {
     let minEval = Infinity;
-    let bestMove = moves[0];
+    let bestMove = orderedMoves[0];
     let moveCounter = 0;
     
-    for (const move of moves) {
+    for (const move of orderedMoves) {
       const newBoard = makeMove(piecesMap, move);
       if (!newBoard) continue;
       
-      const evaluation = await minimax(newBoard, depth - 1, alpha, beta, true, color, initialDepth, startTime, maxTimeMs);
+      // DTP: Evaluate move safety and apply penalty/bonus
+      let safetyAdjustment = 0;
+      if (useDTP && depth === initialDepth) {
+        safetyAdjustment = evaluateMoveSafety(piecesMap, move, currentColor);
+      }
+      
+      const evaluation = await minimax(newBoard, adaptiveDepth - 1, alpha, beta, true, color, initialDepth, startTime, maxTimeMs, useDTP);
       
       if (evaluation.timeoutReached) {
         return { score: minEval, move: bestMove, timeoutReached: true };
       }
       
-      if (evaluation.score < minEval) {
-        minEval = evaluation.score;
+      // Apply safety adjustment to score (inverted for minimizing player)
+      const adjustedScore = evaluation.score - safetyAdjustment;
+      
+      if (adjustedScore < minEval) {
+        minEval = adjustedScore;
         bestMove = move;
       }
       
-      beta = Math.min(beta, evaluation.score);
-      if (beta <= alpha) break;
+      beta = Math.min(beta, adjustedScore);
+      if (beta <= alpha) break; // Alpha-beta pruning
       
       // Yield to browser periodically
       moveCounter++;
@@ -383,7 +586,7 @@ async function minimax(piecesMap, depth, alpha, beta, maximizingPlayer, color, i
 }
 
 /**
- * Select best move using advanced AI for 9D chess
+ * Select best move using advanced AI for 9D chess with Dynamic Threat Prioritization
  */
 export async function selectBestMoveAdvanced(piecesMap, color, difficulty = 'hard', useNN = false, moveHistory = [], temperature = 0) {
   const legalMoves = getAllLegalMovesAdvanced(piecesMap, color);
@@ -398,7 +601,10 @@ export async function selectBestMoveAdvanced(piecesMap, color, difficulty = 'har
     console.log(`🎯 9D AI: Limited to top 40 moves (early game optimization)`);
   }
   
-  // Difficulty determines depth (reduced for 9D due to larger search space)
+  // Enable DTP for Master difficulty
+  const useDTP = (difficulty === 'master');
+  
+  // Difficulty determines base depth (can be extended by DTP)
   let depth;
   switch (difficulty) {
     case 'easy':
@@ -408,21 +614,30 @@ export async function selectBestMoveAdvanced(piecesMap, color, difficulty = 'har
       depth = 1;
       break;
     case 'hard':
-      depth = 2; // Depth 2 in 9D is like depth 3 in 3D!
+      depth = 2;
       break;
     case 'master':
-      depth = 2;
+      depth = 3; // Base depth 3, DTP can extend to 4-5 when threatened
       break;
     default:
       depth = 1;
   }
   
-  console.log(`🤖 9D AI thinking (depth ${depth})...`);
+  console.log(`🤖 9D AI thinking (depth ${depth}, DTP: ${useDTP ? 'ENABLED' : 'DISABLED'})...`);
+  
+  // Check initial threat level
+  if (useDTP) {
+    const initialThreats = detectGeometricThreats(piecesMap, color);
+    if (initialThreats.level > 0) {
+      console.log(`⚠️ DTP: Initial threat level: ${initialThreats.description} (safety: ${initialThreats.kingSafety}, escapes: ${initialThreats.escapeRoutes})`);
+    }
+  }
+  
   const startTime = Date.now();
   
-  const result = await minimax(piecesMap, depth, -Infinity, Infinity, true, color, depth, startTime);
+  const result = await minimax(piecesMap, depth, -Infinity, Infinity, true, color, depth, startTime, 30000, useDTP);
   
-  const thinkingTime = ((Date.now() - startTime) /1000).toFixed(2);
+  const thinkingTime = ((Date.now() - startTime) / 1000).toFixed(2);
   console.log(`✅ Evaluation complete in ${thinkingTime}s`);
   
   if (result.timeoutReached) {
