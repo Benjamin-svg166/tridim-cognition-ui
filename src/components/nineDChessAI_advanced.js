@@ -257,11 +257,14 @@ export function getAllLegalMovesAdvanced(piecesMap, color, size = 8, levels = 9)
 }
 
 // ============================================================================
-// DYNAMIC THREAT PRIORITIZATION (DTP) MODULE - Phase 2
+// DYNAMIC THREAT PRIORITIZATION (DTP-II) MODULE - Phase 2 Enhanced
 // ============================================================================
 
+// Threat history buffer (persists across moves for momentum tracking)
+let globalThreatHistory = [];
+
 /**
- * Detect geometric threats in current position
+ * Detect geometric threats in current position with compression analysis
  * Returns threat level object with detailed analysis
  */
 function detectGeometricThreats(piecesMap, color) {
@@ -269,12 +272,19 @@ function detectGeometricThreats(piecesMap, color) {
   const board9D = convertPiecesMapToBoard9D(piecesMap);
   const myKing = pieces.find(p => p.type === 'king' && p.color === color);
   
-  if (!myKing) return { level: 0, kingSafety: 0, escapeRoutes: 10, verticalThreats: 0 };
+  if (!myKing) return { 
+    level: 0, 
+    kingSafety: 0, 
+    escapeRoutes: 10, 
+    verticalThreats: 0,
+    compressionFlags: { vertical: false, diagonal: false, horizontal: false },
+    nearbyDefenders: 0
+  };
   
   // Calculate king safety score
   const kingSafety = evaluateKingSafety9D(myKing.pos, pieces, board9D, color);
   
-  // Count escape routes
+  // Count escape routes (all 27 adjacent squares in 3D space)
   const adjacentLayers = [myKing.pos.z - 1, myKing.pos.z, myKing.pos.z + 1].filter(z => z >= 0 && z <= 8);
   let escapeRoutes = 0;
   
@@ -298,12 +308,13 @@ function detectGeometricThreats(piecesMap, color) {
     }
   }
   
-  // Count vertical threats
-  let verticalThreats = 0;
   const kz = myKing.pos.z;
   const kx = myKing.pos.x;
   const ky = myKing.pos.y;
+  const enemyColor = color === 'white' ? 'black' : 'white';
   
+  // Count vertical threats (rooks/queens on same x,y different z)
+  let verticalThreats = 0;
   for (let checkZ = 0; checkZ <= 8; checkZ++) {
     if (checkZ === kz) continue;
     const piece = board9D[checkZ][ky][kx];
@@ -312,83 +323,342 @@ function detectGeometricThreats(piecesMap, color) {
     }
   }
   
-  // Calculate overall threat level
+  // Detect diagonal threats (bishops/queens on diagonal paths)
+  let diagonalThreats = 0;
+  for (let dz = -8; dz <= 8; dz++) {
+    for (let d = -7; d <= 7; d++) {
+      if (dz === 0 && d === 0) continue;
+      const checkZ = kz + dz;
+      const checkX = kx + d;
+      const checkY = ky + d;
+      if (checkZ >= 0 && checkZ <= 8 && checkX >= 0 && checkX < 8 && checkY >= 0 && checkY < 8) {
+        const piece = board9D[checkZ][checkY][checkX];
+        if (piece && piece.color !== color && (piece.type === 'bishop' || piece.type === 'queen')) {
+          diagonalThreats++;
+        }
+      }
+    }
+  }
+  
+  // Detect horizontal threats (rooks/queens on same z-layer)
+  let horizontalThreats = 0;
+  for (let x = 0; x < 8; x++) {
+    if (x !== kx) {
+      const piece = board9D[kz][ky][x];
+      if (piece && piece.color !== color && (piece.type === 'rook' || piece.type === 'queen')) {
+        horizontalThreats++;
+      }
+    }
+  }
+  for (let y = 0; y < 8; y++) {
+    if (y !== ky) {
+      const piece = board9D[kz][y][kx];
+      if (piece && piece.color !== color && (piece.type === 'rook' || piece.type === 'queen')) {
+        horizontalThreats++;
+      }
+    }
+  }
+  
+  // Count nearby defenders (friendly pieces within 1 z-layer)
+  let nearbyDefenders = 0;
+  for (const layer of adjacentLayers) {
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dy = -2; dy <= 2; dy++) {
+        const defX = kx + dx;
+        const defY = ky + dy;
+        if (defX >= 0 && defX < 8 && defY >= 0 && defY < 8) {
+          const piece = board9D[layer][defY][defX];
+          if (piece && piece.color === color && piece.type !== 'king') {
+            nearbyDefenders++;
+          }
+        }
+      }
+    }
+  }
+  
+  // Compression flags
+  const compressionFlags = {
+    vertical: verticalThreats >= 2,
+    diagonal: diagonalThreats >= 2,
+    horizontal: horizontalThreats >= 2
+  };
+  
+  const multiCompressionCount = [compressionFlags.vertical, compressionFlags.diagonal, compressionFlags.horizontal]
+    .filter(Boolean).length;
+  
+  // Enhanced threat level calculation with compression awareness
   let threatLevel = 0;
   
-  if (kingSafety < -400) threatLevel = 3; // CRITICAL: Checkmate imminent
-  else if (kingSafety < -100) threatLevel = 2; // HIGH: Severe danger
-  else if (kingSafety < 0) threatLevel = 1; // MODERATE: Some danger
+  // Level 3: IMMINENT COLLAPSE
+  if (escapeRoutes <= 1 && multiCompressionCount >= 2) threatLevel = 3;
+  else if (kingSafety < -400) threatLevel = 3;
+  else if (escapeRoutes === 0) threatLevel = 3;
   
-  if (escapeRoutes === 0) threatLevel = Math.max(threatLevel, 3);
-  else if (escapeRoutes <= 2) threatLevel = Math.max(threatLevel, 2);
-  else if (escapeRoutes <= 4) threatLevel = Math.max(threatLevel, 1);
+  // Level 2: CRITICAL
+  if (threatLevel < 2) {
+    if (escapeRoutes <= 2 && multiCompressionCount >= 1) threatLevel = 2;
+    else if (kingSafety < -100) threatLevel = 2;
+    else if (verticalThreats >= 2) threatLevel = 2;
+    else if (nearbyDefenders === 0 && escapeRoutes <= 3) threatLevel = 2;
+  }
   
-  if (verticalThreats >= 2) threatLevel = Math.max(threatLevel, 2);
-  else if (verticalThreats >= 1) threatLevel = Math.max(threatLevel, 1);
+  // Level 1: CAUTION
+  if (threatLevel < 1) {
+    if (escapeRoutes <= 4) threatLevel = 1;
+    else if (kingSafety < 0) threatLevel = 1;
+    else if (verticalThreats >= 1 || diagonalThreats >= 1) threatLevel = 1;
+  }
   
   return {
     level: threatLevel,
     kingSafety,
     escapeRoutes,
     verticalThreats,
-    description: threatLevel === 3 ? 'CRITICAL' : 
-                 threatLevel === 2 ? 'HIGH' : 
-                 threatLevel === 1 ? 'MODERATE' : 'LOW'
+    diagonalThreats,
+    horizontalThreats,
+    compressionFlags,
+    nearbyDefenders,
+    multiCompressionCount,
+    description: threatLevel === 3 ? 'IMMINENT_COLLAPSE' : 
+                 threatLevel === 2 ? 'CRITICAL' : 
+                 threatLevel === 1 ? 'CAUTION' : 'SAFE'
   };
 }
 
 /**
- * Calculate adaptive search depth based on threat level
+ * Check threat momentum - detects if danger is increasing over time
  */
-function getAdaptiveDepth(baseDepth, threats) {
+function checkThreatMomentum(threatHistory, currentThreats) {
+  if (threatHistory.length < 3) return { momentum: 'stable', forceCritical: false };
+  
+  const recent = threatHistory.slice(-4); // Last 4 positions
+  const escapeRouteHistory = recent.map(t => t.escapeRoutes);
+  const threatLevelHistory = recent.map(t => t.level);
+  
+  // Check for consistent danger increase
+  let increasingCount = 0;
+  for (let i = 1; i < escapeRouteHistory.length; i++) {
+    if (escapeRouteHistory[i] < escapeRouteHistory[i - 1]) {
+      increasingCount++;
+    }
+  }
+  
+  // Danger is increasing if escape routes drop 3+ times consecutively
+  const dangerIncreasing = increasingCount >= 3;
+  
+  // Or if escape routes dropped from ≥4 to ≤2 recently
+  const suddenDrop = escapeRouteHistory[0] >= 4 && currentThreats.escapeRoutes <= 2;
+  
+  // Force critical mode if danger is accelerating
+  const forceCritical = (dangerIncreasing || suddenDrop) && currentThreats.level >= 1;
+  
+  return {
+    momentum: dangerIncreasing ? 'increasing' : suddenDrop ? 'sudden_drop' : 'stable',
+    forceCritical,
+    description: forceCritical ? '⚠️ Threat momentum detected - forcing defensive mode' : ''
+  };
+}
+
+/**
+ * Calculate adaptive search depth based on threat level (DTP-II Enhanced)
+ */
+function getAdaptiveDepth(baseDepth, threats, momentum) {
   let depth = baseDepth;
   
-  // Critical threats: +2 ply
+  // Apply momentum override
+  if (momentum && momentum.forceCritical && threats.level < 2) {
+    console.log(`⚡ Threat momentum override: escalating to CRITICAL mode`);
+    threats = { ...threats, level: 2 }; // Escalate to critical
+  }
+  
+  // Level 3: IMMINENT COLLAPSE - Maximum extension
   if (threats.level === 3) {
-    depth += 2;
+    depth += 3; // Depth 3→6 for Master
   }
-  // High threats: +1 ply
+  // Level 2: CRITICAL - Strong extension  
   else if (threats.level === 2) {
-    depth += 1;
+    depth += 2; // Depth 3→5 for Master
   }
-  // Moderate threats: +1 ply (50% chance to avoid performance hit)
-  else if (threats.level === 1 && Math.random() > 0.5) {
-    depth += 1;
+  // Level 1: CAUTION - Moderate extension
+  else if (threats.level === 1) {
+    depth += 1; // Depth 3→4 for Master
   }
   
   return depth;
 }
 
 /**
- * Improved move ordering with threat-aware prioritization
+ * Evaluate geometric escape potential for a move
  */
-function orderMoves(moves, piecesMap, color, threatLevel) {
+function evaluateGeometricEscape(piecesMap, move, color, currentThreats) {
+  const newBoard = makeMove(piecesMap, move);
+  if (!newBoard) return 0;
+  
+  const newThreats = detectGeometricThreats(newBoard, color);
+  let escapeBonus = 0;
+  
+  // Bonus for increasing escape routes
+  const escapeRouteGain = newThreats.escapeRoutes - currentThreats.escapeRoutes;
+  if (escapeRouteGain > 0) {
+    escapeBonus += escapeRouteGain * 80; // +80 per additional escape square
+  }
+  
+  // Bonus for breaking compression
+  if (currentThreats.compressionFlags.vertical && !newThreats.compressionFlags.vertical) {
+    escapeBonus += 150; // Breaking vertical corridor
+  }
+  if (currentThreats.compressionFlags.diagonal && !newThreats.compressionFlags.diagonal) {
+    escapeBonus += 150; // Breaking diagonal seal
+  }
+  if (currentThreats.compressionFlags.horizontal && !newThreats.compressionFlags.horizontal) {
+    escapeBonus += 120; // Breaking horizontal lock
+  }
+  
+  // Bonus for moving king to safer z-layer
+  if (move.piece === 'king') {
+    const pieces = Array.from(piecesMap.values());
+    const myKing = pieces.find(p => p.type === 'king' && p.color === color);
+    
+    if (myKing) {
+      const oldLayerDefenders = pieces.filter(p => 
+        p.color === color && 
+        p.type !== 'king' && 
+        Math.abs(p.pos.z - myKing.pos.z) <= 1
+      ).length;
+      
+      const newLayerDefenders = pieces.filter(p => 
+        p.color === color && 
+        p.type !== 'king' && 
+        Math.abs(p.pos.z - move.to.z) <= 1
+      ).length;
+      
+      if (newLayerDefenders > oldLayerDefenders) {
+        escapeBonus += 120; // Moving to layer with more defenders
+      }
+    }
+  }
+  
+  // Bonus for adding defenders near king
+  const defenderGain = newThreats.nearbyDefenders - currentThreats.nearbyDefenders;
+  if (defenderGain > 0) {
+    escapeBonus += defenderGain * 100; // +100 per additional defender
+  }
+  
+  return escapeBonus;
+}
+
+/**
+ * Evaluate rook defensive coordination
+ */
+function evaluateRookDefense(piecesMap, move, color) {
+  if (move.piece !== 'rook') return 0;
+  
+  const pieces = Array.from(piecesMap.values());
+  const myKing = pieces.find(p => p.type === 'king' && p.color === color);
+  
+  if (!myKing) return 0;
+  
+  let defenseBonus = 0;
+  const rookToPos = move.to;
+  const kingPos = myKing.pos;
+  
+  // Bonus if rook on same file as king but behind it (shield)
+  if (rookToPos.x === kingPos.x && rookToPos.y === kingPos.y) {
+    const zDiff = Math.abs(rookToPos.z - kingPos.z);
+    if (zDiff === 1 || zDiff === 2) {
+      defenseBonus += 40; // Vertical shield
+    }
+  }
+  
+  // Bonus if rook controls vertical lane adjacent to king
+  const xDiff = Math.abs(rookToPos.x - kingPos.x);
+  const yDiff = Math.abs(rookToPos.y - kingPos.y);
+  if ((xDiff === 1 || yDiff === 1) && rookToPos.z !== kingPos.z) {
+    defenseBonus += 60; // Guarding adjacent vertical lane
+  }
+  
+  // Bonus if blocking enemy rook/queen corridor
+  const board9D = convertPiecesMapToBoard9D(piecesMap);
+  const enemyColor = color === 'white' ? 'black' : 'white';
+  
+  // Check if this move blocks a vertical threat
+  for (let checkZ = 0; checkZ <= 8; checkZ++) {
+    if (checkZ === kingPos.z) continue;
+    const piece = board9D[checkZ][kingPos.y][kingPos.x];
+    if (piece && piece.color !== color && (piece.type === 'rook' || piece.type === 'queen')) {
+      // There's a vertical threat - does our rook move block it?
+      const between = (checkZ < kingPos.z && rookToPos.z > checkZ && rookToPos.z < kingPos.z) ||
+                      (checkZ > kingPos.z && rookToPos.z < checkZ && rookToPos.z > kingPos.z);
+      if (between && rookToPos.x === kingPos.x && rookToPos.y === kingPos.y) {
+        defenseBonus += 80; // Blocking vertical attack
+      }
+    }
+  }
+  
+  // Bonus for rook + king forming vertical "ladder" (shared file, different z)
+  if (rookToPos.x === kingPos.x && rookToPos.y === kingPos.y && rookToPos.z !== kingPos.z) {
+    defenseBonus += 100; // Vertical coordination
+  }
+  
+  return defenseBonus;
+}
+
+/**
+ * Improved move ordering with threat-aware prioritization (DTP-II Enhanced)
+ */
+function orderMoves(moves, piecesMap, color, threatLevel, currentThreats) {
   return moves.sort((a, b) => {
     let scoreA = 0;
     let scoreB = 0;
     
-    // Priority 1: Captures (always valuable)
-    scoreA += (a.capturedValue || 0) * 10;
-    scoreB += (b.capturedValue || 0) * 10;
-    
-    // Priority 2: King moves when under threat
+    // Priority 1: King escape moves when under severe threat (CRITICAL or IMMINENT)
     if (threatLevel >= 2) {
-      if (a.piece === 'king') scoreA += 5000;
-      if (b.piece === 'king') scoreB += 5000;
+      if (a.piece === 'king') {
+        const escapeBonus = evaluateGeometricEscape(piecesMap, a, color, currentThreats);
+        scoreA += 10000 + escapeBonus; // Prioritize escapes that actually help
+      }
+      if (b.piece === 'king') {
+        const escapeBonus = evaluateGeometricEscape(piecesMap, b, color, currentThreats);
+        scoreB += 10000 + escapeBonus;
+      }
     }
     
-    // Priority 3: Defensive moves (pieces moving toward king)
+    // Priority 2: Defensive rook moves when threatened
+    if (threatLevel >= 1) {
+      if (a.piece === 'rook') {
+        scoreA += evaluateRookDefense(piecesMap, a, color);
+      }
+      if (b.piece === 'rook') {
+        scoreB += evaluateRookDefense(piecesMap, b, color);
+      }
+    }
+    
+    // Priority 3: Captures (always valuable but less so when king endangered)
+    const captureWeight = threatLevel >= 2 ? 5 : 10;
+    scoreA += (a.capturedValue || 0) * captureWeight;
+    scoreB += (b.capturedValue || 0) * captureWeight;
+    
+    // Priority 4: Defensive moves (pieces moving toward king or blocking attacks)
     const myKing = Array.from(piecesMap.values()).find(p => p.type === 'king' && p.color === color);
     if (myKing && threatLevel >= 1) {
       const distToKingA = Math.abs(a.to.x - myKing.pos.x) + Math.abs(a.to.y - myKing.pos.y) + Math.abs(a.to.z - myKing.pos.z);
       const distToKingB = Math.abs(b.to.x - myKing.pos.x) + Math.abs(b.to.y - myKing.pos.y) + Math.abs(b.to.z - myKing.pos.z);
       
       // Closer to king = higher priority when threatened
-      scoreA += (15 - distToKingA) * 100;
-      scoreB += (15 - distToKingB) * 100;
+      const proximityWeight = threatLevel >= 2 ? 150 : 100;
+      scoreA += (15 - distToKingA) * proximityWeight;
+      scoreB += (15 - distToKingB) * proximityWeight;
     }
     
-    // Priority 4: Central control (lower priority when threatened)
+    // Priority 5: Moves that break compression
+    if (threatLevel >= 2) {
+      const escapeA = evaluateGeometricEscape(piecesMap, a, color, currentThreats);
+      const escapeB = evaluateGeometricEscape(piecesMap, b, color, currentThreats);
+      scoreA += escapeA;
+      scoreB += escapeB;
+    }
+    
+    // Priority 6: Central control (only when safe)
     if (threatLevel === 0) {
       const centralityA = 7 - (Math.abs(a.to.x - 3.5) + Math.abs(a.to.y - 3.5));
       const centralityB = 7 - (Math.abs(b.to.x - 3.5) + Math.abs(b.to.y - 3.5));
@@ -401,26 +671,60 @@ function orderMoves(moves, piecesMap, color, threatLevel) {
 }
 
 /**
- * Evaluate move safety - returns penalty if move worsens king safety
+ * Evaluate move safety - returns penalty/bonus based on king safety impact (DTP-II Enhanced)
  */
-function evaluateMoveSafety(piecesMap, move, color) {
+function evaluateMoveSafety(piecesMap, move, color, currentThreats) {
   const newBoard = makeMove(piecesMap, move);
   if (!newBoard) return -10000; // Invalid move
   
   const threats = detectGeometricThreats(newBoard, color);
   
-  // Heavy penalty for moves that increase danger
-  if (threats.level === 3) return -5000; // Don't walk into checkmate
-  if (threats.level === 2) return -2000; // Avoid severe danger
-  if (threats.level === 1) return -500;  // Slight penalty for risky moves
-  
-  // Bonus for improving safety
-  const currentThreats = detectGeometricThreats(piecesMap, color);
-  if (threats.level < currentThreats.level) {
-    return 1000 * (currentThreats.level - threats.level); // Reward for improving safety
+  // MUCH stronger penalties for moves that increase danger
+  if (threats.level === 3) {
+    // Imminent collapse - treat as worse than losing queen
+    if (threats.compressionFlags.vertical && threats.compressionFlags.diagonal) {
+      return -10000; // Multi-compression checkmate geometry
+    }
+    return -7000; // Don't walk into imminent checkmate
   }
   
-  return 0;
+  if (threats.level === 2) {
+    // Critical danger - treat as losing a rook
+    if (threats.multiCompressionCount >= 2) {
+      return -5000; // Multiple compression vectors = severe danger
+    }
+    return -3000; // Avoid critical danger
+  }
+  
+  if (threats.level === 1) {
+    return -800; // Moderate penalty for caution-level moves
+  }
+  
+  // Strong bonus for improving safety
+  if (threats.level < currentThreats.level) {
+    const improvement = currentThreats.level - threats.level;
+    return 2000 * improvement; // +2000 per threat level reduced
+  }
+  
+  // Bonus for improving escape routes while maintaining threat level
+  const escapeImprovement = threats.escapeRoutes - currentThreats.escapeRoutes;
+  if (escapeImprovement > 0 && threats.level === currentThreats.level) {
+    return escapeImprovement * 300; // +300 per additional escape
+  }
+  
+  // Bonus for breaking compression
+  let compressionBonus = 0;
+  if (currentThreats.compressionFlags.vertical && !threats.compressionFlags.vertical) {
+    compressionBonus += 400;
+  }
+  if (currentThreats.compressionFlags.diagonal && !threats.compressionFlags.diagonal) {
+    compressionBonus += 400;
+  }
+  if (currentThreats.compressionFlags.horizontal && !threats.compressionFlags.horizontal) {
+    compressionBonus += 300;
+  }
+  
+  return compressionBonus;
 }
 
 /**
@@ -452,28 +756,41 @@ function makeMove(piecesMap, move) {
 }
 
 /**
- * Minimax algorithm with alpha-beta pruning and Dynamic Threat Prioritization
+ * Minimax algorithm with alpha-beta pruning and Dynamic Threat Prioritization II
  */
-async function minimax(piecesMap, depth, alpha, beta, maximizingPlayer, color, initialDepth = depth, startTime = Date.now(), maxTimeMs = 30000, useDTP = true) {
+async function minimax(piecesMap, depth, alpha, beta, maximizingPlayer, color, initialDepth = depth, startTime = Date.now(), maxTimeMs = 30000, useDTP = true, threatHistory = []) {
   // Time limit check
   if (Date.now() - startTime > maxTimeMs) {
     return { score: evaluatePositionAdvanced(piecesMap, color), timeoutReached: true };
   }
   
-  // DTP: Detect threats and adjust depth if needed
+  // DTP-II: Detect threats and check momentum
   const currentColor = maximizingPlayer ? color : (color === 'white' ? 'black' : 'white');
-  let threats = { level: 0, escapeRoutes: 10 };
+  let threats = { level: 0, escapeRoutes: 10, compressionFlags: {} };
   let adaptiveDepth = depth;
+  let momentum = { forceCritical: false };
   
   if (useDTP) {
     threats = detectGeometricThreats(piecesMap, currentColor);
     
-    // Extend search depth when under threat (only at non-leaf nodes)
-    if (depth > 0 && threats.level >= 2) {
-      adaptiveDepth = getAdaptiveDepth(depth, threats);
+    // Check threat momentum (only at root)
+    if (depth === initialDepth && threatHistory.length > 0) {
+      momentum = checkThreatMomentum(threatHistory, threats);
+      if (momentum.forceCritical && depth === initialDepth) {
+        console.log(momentum.description);
+      }
+    }
+    
+    // Extend search depth when under threat (enhanced scaling)
+    if (depth > 0 && (threats.level >= 1 || momentum.forceCritical)) {
+      adaptiveDepth = getAdaptiveDepth(depth, threats, momentum);
       
       if (adaptiveDepth > depth && depth === initialDepth) {
-        console.log(`🛡️ DTP: Threat level ${threats.description} detected, extending depth ${depth}→${adaptiveDepth}`);
+        const modeDesc = threats.description;
+        const compressionInfo = threats.multiCompressionCount > 0 ? 
+          ` (${threats.multiCompressionCount} compression vectors)` : '';
+        console.log(`🛡️ DTP-II: Entering ${modeDesc} mode, extending depth ${depth}→${adaptiveDepth}${compressionInfo}`);
+        console.log(`   King: ${threats.escapeRoutes} escapes, ${threats.nearbyDefenders} defenders, safety: ${threats.kingSafety}`);
       }
     }
   }
@@ -498,8 +815,8 @@ async function minimax(piecesMap, depth, alpha, beta, maximizingPlayer, color, i
     }
   }
   
-  // DTP: Improved move ordering based on threat level
-  const orderedMoves = useDTP ? orderMoves(moves, piecesMap, currentColor, threats.level) : 
+  // DTP-II: Enhanced move ordering with escape and rook defense
+  const orderedMoves = useDTP ? orderMoves(moves, piecesMap, currentColor, threats.level, threats) : 
                        moves.sort((a, b) => (b.capturedValue || 0) - (a.capturedValue || 0));
   
   if (maximizingPlayer) {
@@ -511,13 +828,21 @@ async function minimax(piecesMap, depth, alpha, beta, maximizingPlayer, color, i
       const newBoard = makeMove(piecesMap, move);
       if (!newBoard) continue;
       
-      // DTP: Evaluate move safety and apply penalty/bonus
+      // DTP-II: Enhanced move safety evaluation with escape bonuses
       let safetyAdjustment = 0;
       if (useDTP && depth === initialDepth) {
-        safetyAdjustment = evaluateMoveSafety(piecesMap, move, currentColor);
+        safetyAdjustment = evaluateMoveSafety(piecesMap, move, currentColor, threats);
+        
+        // Add geometric escape bonus
+        if (threats.level >= 1) {
+          safetyAdjustment += evaluateGeometricEscape(piecesMap, move, currentColor, threats);
+        }
       }
       
-      const evaluation = await minimax(newBoard, adaptiveDepth - 1, alpha, beta, false, color, initialDepth, startTime, maxTimeMs, useDTP);
+      // Update threat history for next ply
+      const newThreatHistory = depth === initialDepth ? [...threatHistory, threats].slice(-6) : threatHistory;
+      
+      const evaluation = await minimax(newBoard, adaptiveDepth - 1, alpha, beta, false, color, initialDepth, startTime, maxTimeMs, useDTP, newThreatHistory);
       
       if (evaluation.timeoutReached) {
         return { score: maxEval, move: bestMove, timeoutReached: true };
@@ -551,13 +876,21 @@ async function minimax(piecesMap, depth, alpha, beta, maximizingPlayer, color, i
       const newBoard = makeMove(piecesMap, move);
       if (!newBoard) continue;
       
-      // DTP: Evaluate move safety and apply penalty/bonus
+      // DTP-II: Enhanced move safety evaluation with escape bonuses
       let safetyAdjustment = 0;
       if (useDTP && depth === initialDepth) {
-        safetyAdjustment = evaluateMoveSafety(piecesMap, move, currentColor);
+        safetyAdjustment = evaluateMoveSafety(piecesMap, move, currentColor, threats);
+        
+        // Add geometric escape bonus
+        if (threats.level >= 1) {
+          safetyAdjustment += evaluateGeometricEscape(piecesMap, move, currentColor, threats);
+        }
       }
       
-      const evaluation = await minimax(newBoard, adaptiveDepth - 1, alpha, beta, true, color, initialDepth, startTime, maxTimeMs, useDTP);
+      // Update threat history for next ply
+      const newThreatHistory = depth === initialDepth ? [...threatHistory, threats].slice(-6) : threatHistory;
+      
+      const evaluation = await minimax(newBoard, adaptiveDepth - 1, alpha, beta, true, color, initialDepth, startTime, maxTimeMs, useDTP, newThreatHistory);
       
       if (evaluation.timeoutReached) {
         return { score: minEval, move: bestMove, timeoutReached: true };
@@ -586,7 +919,7 @@ async function minimax(piecesMap, depth, alpha, beta, maximizingPlayer, color, i
 }
 
 /**
- * Select best move using advanced AI for 9D chess with Dynamic Threat Prioritization
+ * Select best move using advanced AI for 9D chess with Dynamic Threat Prioritization II
  */
 export async function selectBestMoveAdvanced(piecesMap, color, difficulty = 'hard', useNN = false, moveHistory = [], temperature = 0) {
   const legalMoves = getAllLegalMovesAdvanced(piecesMap, color);
@@ -601,10 +934,10 @@ export async function selectBestMoveAdvanced(piecesMap, color, difficulty = 'har
     console.log(`🎯 9D AI: Limited to top 40 moves (early game optimization)`);
   }
   
-  // Enable DTP for Master difficulty
+  // Enable DTP-II for Master difficulty
   const useDTP = (difficulty === 'master');
   
-  // Difficulty determines base depth (can be extended by DTP)
+  // Difficulty determines base depth (can be extended by DTP-II)
   let depth;
   switch (difficulty) {
     case 'easy':
@@ -617,25 +950,63 @@ export async function selectBestMoveAdvanced(piecesMap, color, difficulty = 'har
       depth = 2;
       break;
     case 'master':
-      depth = 3; // Base depth 3, DTP can extend to 4-5 when threatened
+      depth = 3; // Base depth 3, DTP-II can extend to 6 when under severe threat
       break;
     default:
       depth = 1;
   }
   
-  console.log(`🤖 9D AI thinking (depth ${depth}, DTP: ${useDTP ? 'ENABLED' : 'DISABLED'})...`);
+  console.log(`🤖 9D AI thinking (depth ${depth}, DTP-II: ${useDTP ? 'ENABLED ⚡' : 'DISABLED'})...`);
   
-  // Check initial threat level
+  // Check initial threat level and update history
+  let initialThreats = { level: 0, escapeRoutes: 10 };
   if (useDTP) {
-    const initialThreats = detectGeometricThreats(piecesMap, color);
-    if (initialThreats.level > 0) {
-      console.log(`⚠️ DTP: Initial threat level: ${initialThreats.description} (safety: ${initialThreats.kingSafety}, escapes: ${initialThreats.escapeRoutes})`);
+    initialThreats = detectGeometricThreats(piecesMap, color);
+    
+    // Update global threat history
+    globalThreatHistory.push(initialThreats);
+    if (globalThreatHistory.length > 6) {
+      globalThreatHistory.shift(); // Keep only last 6 positions
+    }
+    
+    // Check threat momentum
+    const momentum = checkThreatMomentum(globalThreatHistory, initialThreats);
+    
+    // Display detailed threat analysis
+    if (initialThreats.level > 0 || momentum.forceCritical) {
+      console.log(`⚠️ DTP-II: Threat Analysis`);
+      console.log(`   Level: ${initialThreats.description} (${initialThreats.level}/3)`);
+      console.log(`   King Safety: ${initialThreats.kingSafety} | Escape Routes: ${initialThreats.escapeRoutes}/27`);
+      console.log(`   Nearby Defenders: ${initialThreats.nearbyDefenders}`);
+      
+      if (initialThreats.multiCompressionCount > 0) {
+        const compressions = [];
+        if (initialThreats.compressionFlags.vertical) compressions.push('VERTICAL');
+        if (initialThreats.compressionFlags.diagonal) compressions.push('DIAGONAL');
+        if (initialThreats.compressionFlags.horizontal) compressions.push('HORIZONTAL');
+        console.log(`   ⚡ Compression Detected: ${compressions.join(' + ')}`);
+      }
+      
+      if (momentum.momentum !== 'stable') {
+        console.log(`   📈 Threat Momentum: ${momentum.momentum.toUpperCase()}`);
+        if (momentum.forceCritical) {
+          console.log(`   🚨 FORCING CRITICAL MODE due to threat acceleration`);
+        }
+      }
+      
+      // Predicted depth extension
+      const predictedDepth = getAdaptiveDepth(depth, initialThreats, momentum);
+      if (predictedDepth > depth) {
+        console.log(`   🔍 Expected search depth: ${depth}→${predictedDepth} ply`);
+      }
+    } else {
+      console.log(`✅ DTP-II: King is safe, standard search mode`);
     }
   }
   
   const startTime = Date.now();
   
-  const result = await minimax(piecesMap, depth, -Infinity, Infinity, true, color, depth, startTime, 30000, useDTP);
+  const result = await minimax(piecesMap, depth, -Infinity, Infinity, true, color, depth, startTime, 30000, useDTP, globalThreatHistory);
   
   const thinkingTime = ((Date.now() - startTime) / 1000).toFixed(2);
   console.log(`✅ Evaluation complete in ${thinkingTime}s`);
