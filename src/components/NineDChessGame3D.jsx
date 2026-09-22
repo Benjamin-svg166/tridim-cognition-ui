@@ -512,6 +512,8 @@ const NineDChessGame3D = () => {
 
   // Handle square click
   const handleSquareClick = useCallback((x, y, z) => {
+    if (gameMode === 'cvc') return; // Both sides are computer-controlled
+
     const clickedKey = `${x},${y},${z}`;
     const clickedPiece = piecesRef.current.get(clickedKey);
     const currentSelectedSquare = selectedSquareRef.current;
@@ -555,7 +557,7 @@ const NineDChessGame3D = () => {
       // Select piece
       selectPiece(x, y, z, clickedPiece);
     }
-  }, []);
+  }, [gameMode]);
 
   // Select a piece and calculate valid moves
   const selectPiece = (x, y, z, piece) => {
@@ -695,7 +697,9 @@ const NineDChessGame3D = () => {
 
   // Wrap makeComputerMove in useCallback with proper dependencies
   const makeComputerMove = useCallback(async () => {
-    console.log('🎯 [9D] makeComputerMove called - gameMode:', gameMode, 'toMove:', toMove, 'computerColor:', computerColor, 'isThinking:', isComputerThinkingRef.current);
+    // In Computer vs Computer mode, the side to move is whoever's turn it is
+    const movingColor = gameMode === 'cvc' ? toMoveRef.current : computerColor;
+    console.log('🎯 [9D] makeComputerMove called - gameMode:', gameMode, 'toMove:', toMove, 'movingColor:', movingColor, 'isThinking:', isComputerThinkingRef.current);
     
     // Prevent duplicate moves
     if (isComputerThinkingRef.current) {
@@ -720,17 +724,17 @@ const NineDChessGame3D = () => {
           console.log('✅ Board converted, pieces count:', piecesRef.current.size);
           
           // Get all legal moves
-          console.log('🔍 Getting legal moves for', computerColor);
+          console.log('🔍 Getting legal moves for', movingColor);
           console.log('📊 Sample pieces from map:');
           let sampleCount = 0;
           piecesRef.current.forEach((piece, key) => {
-            if (sampleCount < 3 && piece.color === computerColor) {
+            if (sampleCount < 3 && piece.color === movingColor) {
               console.log(`  - ${key}:`, piece, 'type:', piece.type, 'typeof:', typeof piece.type);
               sampleCount++;
             }
           });
           
-          const legalMoves = getAllLegalMovesForSapience(piecesRef.current, computerColor);
+          const legalMoves = getAllLegalMovesForSapience(piecesRef.current, movingColor);
           console.log('✅ Found', legalMoves.length, 'legal moves');
           
           if (legalMoves.length > 0) {
@@ -755,27 +759,27 @@ const NineDChessGame3D = () => {
             console.log('🎯 Selected move:', move);
           } else {
             console.warn('⚠️ No legal moves found! Falling back to traditional AI');
-            move = selectBestMove(piecesRef.current, computerColor, difficulty);
+            move = selectBestMove(piecesRef.current, movingColor, difficulty);
           }
         } catch (error) {
           console.error('❌ Error in Sapience System:', error);
           console.error('Stack trace:', error.stack);
           // Fall back to traditional AI on error
           console.log('🔄 Falling back to traditional AI due to error');
-          move = selectBestMove(piecesRef.current, computerColor, difficulty);
+          move = selectBestMove(piecesRef.current, movingColor, difficulty);
         }
       } else {
         // Use traditional AI
         move = useAdvancedAI && (difficulty === 'hard' || difficulty === 'master')
-          ? await selectBestMoveAdvanced(piecesRef.current, computerColor, difficulty)
-          : selectBestMove(piecesRef.current, computerColor, difficulty);
+          ? await selectBestMoveAdvanced(piecesRef.current, movingColor, difficulty)
+          : selectBestMove(piecesRef.current, movingColor, difficulty);
       }
 
       console.log('🔍 [9D] AI returned move:', move);
 
       if (move) {
         console.log('🎲 [9D] Executing move:', move.from, '→', move.to);
-        if (move.piece === 'pawn' && canPromote(move.to, computerColor)) {
+        if (move.piece === 'pawn' && canPromote(move.to, movingColor)) {
           executeMove(move.from, move.to, 'queen');
         } else {
           executeMove(move.from, move.to);
@@ -791,13 +795,14 @@ const NineDChessGame3D = () => {
       isComputerThinkingRef.current = false;
       console.log('🔓 [9D] Thinking lock released');
     }
-  }, [useAdvancedAI, difficulty, computerColor, executeMove, useSapienceSystem]);
+  }, [gameMode, toMove, useAdvancedAI, difficulty, computerColor, executeMove, useSapienceSystem]);
 
-  // AI move
+  // AI move (also drives both sides in Computer vs Computer mode)
   useEffect(() => {
+    const isComputerTurn = (gameMode === 'pvc' && toMove === computerColor) || gameMode === 'cvc';
     console.log('🔄 [9D] useEffect triggered - gameMode:', gameMode, 'toMove:', toMove, 'computerColor:', computerColor, 'gameStatus:', gameStatus, 'promotionPending:', promotionPending);
     
-    if (gameMode === 'pvc' && toMove === computerColor && !gameStatus?.includes('mate') && !promotionPending) {
+    if (isComputerTurn && !gameStatus?.includes('mate') && !promotionPending) {
       console.log('✅ [9D] All conditions met - scheduling computer move');
       setAiThinking(true);
       const timer = setTimeout(() => {
@@ -808,7 +813,7 @@ const NineDChessGame3D = () => {
         clearTimeout(timer);
       };
     } else {
-      console.log('❌ [9D] Conditions not met - gameMode:', gameMode === 'pvc', 'turn:', toMove === computerColor, 'notMate:', !gameStatus?.includes('mate'), 'notPromotion:', !promotionPending);
+      console.log('❌ [9D] Conditions not met - isComputerTurn:', isComputerTurn, 'notMate:', !gameStatus?.includes('mate'), 'notPromotion:', !promotionPending);
     }
   }, [toMove, gameMode, computerColor, gameStatus, promotionPending, makeComputerMove]);
 
@@ -918,6 +923,7 @@ const NineDChessGame3D = () => {
   // Draw offer management
   const offerDraw = () => {
     if (gameStatus) return; // Can't offer draw if game is over
+    if (gameMode === 'cvc') return; // Both sides are computer-controlled
     if (gameMode === 'pvc' && toMove === computerColor) return; // Can't offer on computer's turn
     
     setDrawOfferedBy(toMove);
@@ -1115,12 +1121,12 @@ const NineDChessGame3D = () => {
             {!drawOfferedBy && !gameStatus && (
               <button 
                 onClick={offerDraw} 
-                disabled={gameMode === 'pvc' && toMove === computerColor}
+                disabled={gameMode === 'cvc' || (gameMode === 'pvc' && toMove === computerColor)}
                 style={{
                   ...buttonStyle,
                   background: '#ff9800',
-                  opacity: (gameMode === 'pvc' && toMove === computerColor) ? 0.5 : 1,
-                  cursor: (gameMode === 'pvc' && toMove === computerColor) ? 'not-allowed' : 'pointer'
+                  opacity: (gameMode === 'cvc' || (gameMode === 'pvc' && toMove === computerColor)) ? 0.5 : 1,
+                  cursor: (gameMode === 'cvc' || (gameMode === 'pvc' && toMove === computerColor)) ? 'not-allowed' : 'pointer'
                 }}
               >
                 Offer Draw
@@ -1171,17 +1177,20 @@ const NineDChessGame3D = () => {
           <select value={gameMode} onChange={(e) => setGameMode(e.target.value)} style={selectStyle}>
             <option value="pvp">Player vs Player</option>
             <option value="pvc">Player vs Computer</option>
+            <option value="cvc">Computer vs Computer</option>
           </select>
           
-          {gameMode === 'pvc' && (
+          {(gameMode === 'pvc' || gameMode === 'cvc') && (
             <>
-              <div style={{ marginTop: '10px' }}>
-                <label style={{ fontSize: '12px' }}>Computer plays as:</label>
-                <select value={computerColor} onChange={(e) => setComputerColor(e.target.value)} style={selectStyle}>
-                  <option value="black">Black</option>
-                  <option value="white">White</option>
-                </select>
-              </div>
+              {gameMode === 'pvc' && (
+                <div style={{ marginTop: '10px' }}>
+                  <label style={{ fontSize: '12px' }}>Computer plays as:</label>
+                  <select value={computerColor} onChange={(e) => setComputerColor(e.target.value)} style={selectStyle}>
+                    <option value="black">Black</option>
+                    <option value="white">White</option>
+                  </select>
+                </div>
+              )}
               <div style={{ marginTop: '10px' }}>
                 <label style={{ fontSize: '12px' }}>Difficulty:</label>
                 <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)} style={selectStyle}>
