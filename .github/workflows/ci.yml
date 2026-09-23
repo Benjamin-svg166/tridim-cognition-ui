@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ main, master, chess-prototype-clean ]
+    branches: [ main, master, chess-prototype-clean, "copilot/**" ]
   pull_request:
     branches: [ main, master ]
 

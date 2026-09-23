@@ -29,6 +29,32 @@ You may also see any lint errors in the console.
 - Start dev server:
 	- `npm start` (http://localhost:3000)
 
+### Windows Setup (PowerShell Execution Policy Fix)
+
+If you see this error in PowerShell:
+```
+npm : File C:\Program Files\nodejs\npm.ps1 cannot be loaded because running scripts is disabled on this system.
+```
+
+**Option 1 – Fix the execution policy (recommended, one-time):**
+Open PowerShell as your normal user (no Administrator required) and run:
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+After that, `npm start` / `npm test` / `npm run build` will work normally.
+
+**Option 2 – Use the provided batch files instead of PowerShell:**
+Double-click or run in `cmd.exe` (not PowerShell):
+```cmd
+start.bat        # equivalent to npm start
+test.bat         # equivalent to npm test -- --watchAll=false
+build.bat        # equivalent to npm run build
+```
+These call `react-scripts` directly via `node_modules\.bin\`, bypassing the `.ps1` wrapper entirely.
+
+**Option 3 – Use `cmd.exe` for all npm commands:**
+Simply open a Command Prompt (`cmd.exe`) instead of PowerShell and run `npm start` there.
+
 ### Features
 - Multi-level board rendering on canvas.
 - Rook/Bishop/Knight/Queen movement rules via utilities.
