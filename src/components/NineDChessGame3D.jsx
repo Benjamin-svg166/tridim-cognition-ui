@@ -5,7 +5,7 @@ import { isValidMove, isPathClear, canPromote, wouldBeInCheckAfterMove, isInChec
 import { selectBestMove, evaluatePosition } from './nineDChessAI';
 import { selectBestMoveAdvanced } from './nineDChessAI_advanced';
 import PromotionModal from './PromotionModal';
-import { SapienceEngine } from '../sapience-system/src/index.js';
+import { SapienceEngine, AdversarialModelingEngine } from '../sapience-system/src/index.js';
 
 /**
  * 9D Chess - Full 3D Playable Game
@@ -352,6 +352,12 @@ const NineDChessGame3D = () => {
   });
   const sapienceEngineRef = useRef(null);
   const [sapientAnalysis, setSapientAnalysis] = useState(null);
+  const [useAME, setUseAME] = useState(() => {
+    const saved = localStorage.getItem('9dchess_useAME');
+    return saved !== null ? JSON.parse(saved) : false;
+  });
+  const ameEngineRef = useRef(null);
+  const [ameAnalysis, setAmeAnalysis] = useState(null);
   
   // Advanced features
   const [positionEvaluation, setPositionEvaluation] = useState(0);
@@ -442,6 +448,38 @@ const NineDChessGame3D = () => {
     localStorage.setItem('9dchess_useSapienceSystem', JSON.stringify(useSapienceSystem));
   }, [useSapienceSystem]);
 
+  // Initialize Adversarial Modeling Engine
+  useEffect(() => {
+    if (useAME && !ameEngineRef.current) {
+      console.log('🕵️ Initializing Adversarial Modeling Engine for 9D Chess...');
+      ameEngineRef.current = new AdversarialModelingEngine();
+      console.log('✅ Adversarial Modeling Engine activated');
+    }
+  }, [useAME]);
+
+  useEffect(() => {
+    localStorage.setItem('9dchess_useAME', JSON.stringify(useAME));
+  }, [useAME]);
+
+  // Live opponent-modeling analysis - updates continuously when AME is active
+  useEffect(() => {
+    if (!useAME || !ameEngineRef.current || piecesRef.current.size === 0) {
+      return;
+    }
+
+    const analysisTimer = setTimeout(() => {
+      try {
+        const board9D = convertPiecesToBoard9D(piecesRef.current);
+        const analysis = ameEngineRef.current.analyzePosition(board9D);
+        setAmeAnalysis(analysis);
+      } catch (error) {
+        console.error('Error in AME position analysis:', error);
+      }
+    }, 500);
+
+    return () => clearTimeout(analysisTimer);
+  }, [useAME, version, toMove]);
+
   // Live Position Analysis - Updates continuously when Sapience is active
   useEffect(() => {
     if (!useSapienceSystem || !sapienceEngineRef.current || piecesRef.current.size === 0) {
@@ -507,8 +545,12 @@ const NineDChessGame3D = () => {
       score += (value + posBonus) * multiplier;
     });
     
-    setPositionEvaluation(Math.max(-100, Math.min(100, score * 5)));
-  }, []);
+    let finalScore = Math.max(-100, Math.min(100, score * 5));
+    if (useAME && ameEngineRef.current) {
+      finalScore = ameEngineRef.current.biasEvaluation(finalScore, convertPiecesToBoard9D(piecesRef.current));
+    }
+    setPositionEvaluation(finalScore);
+  }, [useAME]);
 
   // Handle square click
   const handleSquareClick = useCallback((x, y, z) => {
@@ -667,6 +709,11 @@ const NineDChessGame3D = () => {
       setGameStatus(`${nextPlayer} is in check!`);
     } else {
       setGameStatus(null);
+    }
+
+    // Feed the completed move into the opponent-modeling engine
+    if (ameEngineRef.current) {
+      ameEngineRef.current.updateFromGame(convertPiecesToBoard9D(piecesRef.current), [...moveHistoryRef.current]);
     }
 
     // Switch turn
@@ -1251,6 +1298,47 @@ const NineDChessGame3D = () => {
                   </div>
                 )}
               </div>
+              <div style={{ marginTop: '10px' }}>
+                <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={useAME} 
+                    onChange={(e) => setUseAME(e.target.checked)}
+                    style={{ marginRight: '8px' }}
+                  />
+                  <span style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '5px',
+                    color: useAME ? '#4caf50' : 'inherit'
+                  }}>
+                    🕵️ Use Adversarial Modeling Engine
+                    {useAME && (
+                      <span style={{ 
+                        fontSize: '10px', 
+                        background: '#4caf50', 
+                        color: 'white',
+                        padding: '2px 6px',
+                        borderRadius: '10px',
+                        fontWeight: 'bold'
+                      }}>
+                        ACTIVE
+                      </span>
+                    )}
+                  </span>
+                </label>
+                {useAME && (
+                  <div style={{ 
+                    fontSize: '10px', 
+                    color: '#aaa', 
+                    marginTop: '5px',
+                    marginLeft: '20px',
+                    fontStyle: 'italic'
+                  }}>
+                    Models opponent tendencies, detects traps, and forecasts king escapes
+                  </div>
+                )}
+              </div>
             </>
           )}
         </div>
@@ -1339,6 +1427,27 @@ const NineDChessGame3D = () => {
                 <strong>Also considered:</strong> {sapientAnalysis.alternatives.length} alternative moves
               </div>
             )}
+          </div>
+        )}
+
+        {/* Adversarial Modeling Engine Display */}
+        {useAME && ameAnalysis && (
+          <div style={{
+            marginBottom: '20px',
+            padding: '15px',
+            background: 'linear-gradient(135deg, #b71c1c 0%, #4a148c 100%)',
+            borderRadius: '8px',
+            border: '2px solid rgba(255, 255, 255, 0.3)',
+            boxShadow: '0 4px 15px rgba(0, 0, 0, 0.3)'
+          }}>
+            <h3 style={{ margin: '0 0 10px 0', fontSize: '16px' }}>🕵️ Opponent Modeling</h3>
+            <div style={{ fontSize: '12px', marginBottom: '8px', background: 'rgba(255,255,255,0.15)', padding: '8px', borderRadius: '5px' }}>
+              <strong>Plan:</strong> {ameAnalysis.plan}
+            </div>
+            <div style={{ fontSize: '11px', display: 'flex', justifyContent: 'space-between' }}>
+              <span>Traps detected: {ameAnalysis.traps.length}</span>
+              <span>Escape routes: {ameAnalysis.escapes.length}</span>
+            </div>
           </div>
         )}
 

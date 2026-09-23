@@ -7,6 +7,7 @@ export { SapienceEngine } from './core/SapienceEngine.js';
 export { SelfAwarenessMonitor } from './core/SelfAwarenessMonitor.js';
 export { AbstractReasoner } from './core/AbstractReasoner.js';
 export { MetaCognitiveController } from './core/MetaCognitiveController.js';
+export { AdversarialModelingEngine } from './core/AdversarialModelingEngine.js';
 export { ChessNeuralInterface } from './integration/ChessNeuralInterface.js';
 export { BoardStateAnalyzer } from './integration/BoardStateAnalyzer.js';
 
