@@ -1,75 +1,57 @@
-# Setup Instructions for Desktop PC
+# Multi-Machine Setup (Laptop + Desktop)
 
-## Step 1: Verify OneDrive Sync
-1. Open OneDrive and ensure Documents folder is syncing
-2. Wait for `cognition-board-ui-react` folder to appear in:
-   ```
-   C:\Users\[YourUsername]\Documents\cognition-board-ui-react
-   ```
-3. Source files (.js, .jsx, .md, etc.) should sync automatically
-4. `node_modules` and `build` folders will NOT sync (by design)
+GitHub is the single source of truth. Each machine has its own clone at the same path, **outside OneDrive**:
 
-## Step 2: Open Project in VS Code
+```
+C:\Users\bussi\Projects\tridim-cognition-ui
+```
+
+Do not keep the project in OneDrive. OneDrive turns files into cloud placeholders that lock folders and break `git checkout` and `npm install`.
+
+## First-time setup (run on each machine)
+
 ```powershell
-cd C:\Users\[YourUsername]\Documents\cognition-board-ui-react
+New-Item -ItemType Directory -Force C:\Users\bussi\Projects
+git clone https://github.com/Benjamin-svg166/tridim-cognition-ui.git C:\Users\bussi\Projects\tridim-cognition-ui
+cd C:\Users\bussi\Projects\tridim-cognition-ui
+git checkout nine-d-cube
+npm install
 code .
 ```
 
-## Step 3: Install Dependencies
-The `node_modules` folder doesn't sync, so install on desktop:
-```bash
-npm install
-```
+## Daily workflow
 
-## Step 4: Build the Project
-The `build` folder doesn't sync, so create it on desktop:
-```bash
-npm run build
-```
+Before you start working on a machine:
 
-## Step 5: Run Development Server
-```bash
-npm start
-```
-
-## Step 6: Exclude Build Folders on Desktop Too
-After the first build, exclude from OneDrive on your desktop:
 ```powershell
-.\exclude-from-onedrive.ps1
-```
-
----
-
-## Why This Setup?
-
-**What DOES sync via OneDrive:**
-- ✅ All source code (.js, .jsx, .css files)
-- ✅ Configuration files (package.json, .gitignore)
-- ✅ Documentation (.md files)
-- ✅ Chess analysis scripts
-- ✅ Your VS Code settings (if Settings Sync is enabled)
-
-**What DOESN'T sync (by design):**
-- ❌ `node_modules/` - Too many files, causes OneDrive conflicts
-- ❌ `build/` - Generated files, can be rebuilt anytime
-- ❌ `.git/` objects - Use Git for version control instead
-
-## Benefits:
-- No OneDrive conflicts during npm install
-- Faster sync (only 10MB of source vs 200MB+ with node_modules)
-- Each machine has optimized local builds
-- No file locking issues during development
-
-## Alternative: Use Git Instead
-For better version control between machines:
-```bash
-# On laptop - commit and push changes
-git add .
-git commit -m "Update feature"
-git push
-
-# On desktop - pull changes
 git pull
-npm install  # If package.json changed
-npm run build
+npm install   # only needed if package.json changed
 ```
+
+When you're done on that machine:
+
+```powershell
+git add -A
+git commit -m "Describe the change"
+git push
+```
+
+Always push before you switch machines, and pull when you sit down at the other one.
+
+## Commands
+
+| Command | Purpose |
+|---------|---------|
+| `npm start` | Dev server (http://localhost:3000) |
+| `npm run build` | Production build to `build/` |
+| `npm test` | Run tests |
+
+## Branches
+
+- `nine-d-cube`: active development (Sapience System, MCTS, Computer vs Computer, Adversarial Modeling Engine)
+- `main`: default branch
+- `clean-start`: older line of work that has diverged from `nine-d-cube`
+
+## What is not in Git (by design)
+
+`node_modules/`, `build/`, and `dist/` are ignored. Each machine regenerates them with `npm install` and `npm run build`.
